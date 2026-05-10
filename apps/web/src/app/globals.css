@@ -1,0 +1,204 @@
+@import url("https://fonts.googleapis.com/css2?family=League+Spartan:wght@600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --navy: #0a1f5c;
+  --navy-deep: #071744;
+  --blue: #123c8c;
+  --royal: #1d4ed8;
+  --gold: #f5c542;
+  --gold-soft: #ffe08a;
+  --cream: #fff7e6;
+  --surface: #ffffff;
+  --ink: #111827;
+  --muted: #64748b;
+  --border: #e5e7eb;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(10, 31, 92, 0.28) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(10, 31, 92, 0.28);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(10, 31, 92, 0.42);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: #f6f8fb;
+  font-family: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: "League Spartan", "Poppins", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(245, 197, 66, 0.95);
+  outline-offset: 2px;
+}
+
+.madani-card {
+  border: 1px solid rgba(10, 31, 92, 0.1);
+  background: #fff;
+}
+
+.madani-blue {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(245, 197, 66, 0.16), transparent 28rem),
+    radial-gradient(circle at 84% 0%, rgba(255, 255, 255, 0.12), transparent 30rem),
+    linear-gradient(135deg, #0a1f5c 0%, #123c8c 52%, #0b2a6f 100%);
+}
+
+.madani-input {
+  width: 100%;
+  min-height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(18, 60, 140, 0.14);
+  background: #fff;
+  padding: 6px 10px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.madani-input:focus {
+  border-color: rgba(245, 197, 66, 0.9);
+  box-shadow: 0 0 0 4px rgba(245, 197, 66, 0.18);
+  outline: none;
+}
+
+.madani-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.madani-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(10, 31, 92, 0.08);
+}
+
+.madani-compact-surface {
+  font-size: 13px;
+}
+
+.madani-compact-surface .rounded-2xl,
+.madani-compact-surface .rounded-xl {
+  border-radius: 8px;
+}
+
+.madani-compact-surface .gap-4 {
+  gap: 0.75rem;
+}
+
+.madani-compact-surface .gap-3 {
+  gap: 0.625rem;
+}
+
+.madani-compact-surface .p-5 {
+  padding: 1rem;
+}
+
+.madani-compact-surface .p-4 {
+  padding: 0.75rem;
+}
+
+.madani-compact-surface .px-5 {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.madani-compact-surface .py-4 {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.madani-compact-surface .min-h-12 {
+  min-height: 2.25rem;
+}
+
+.madani-compact-surface .h-12 {
+  height: 2.5rem;
+}
+
+.madani-compact-surface .h-10 {
+  height: 2.125rem;
+}
+
+.madani-compact-surface .font-display.text-3xl {
+  font-size: 1.45rem;
+  line-height: 1.65rem;
+}
+
+.madani-compact-surface .font-display.text-2xl {
+  font-size: 1.2rem;
+  line-height: 1.45rem;
+}
+
+.madani-compact-surface .font-display.text-xl {
+  font-size: 1.05rem;
+  line-height: 1.25rem;
+}
+
+.madani-compact-surface .text-sm {
+  font-size: 0.8125rem;
+  line-height: 1.2rem;
+}
+
+.madani-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+}
+
+.madani-sidebar-scroll::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.madani-sidebar-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.madani-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+}
