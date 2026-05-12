@@ -24,9 +24,15 @@ class User extends Authenticatable
         'password',
         'phone',
         'photo_url',
+        'google_id',
+        'google_avatar_url',
         'fcm_token',
         'is_active',
         'last_login_at',
+        'last_login_ip',
+        'last_login_user_agent',
+        'password_changed_at',
+        'google_linked_at',
     ];
 
     /**
@@ -50,6 +56,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'is_active' => 'boolean',
             'last_login_at' => 'datetime',
+            'password_changed_at' => 'datetime',
+            'google_linked_at' => 'datetime',
             'password' => 'hashed',
         ];
     }

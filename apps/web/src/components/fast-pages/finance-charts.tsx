@@ -58,8 +58,8 @@ export function CashFlowChart({ rows, range = "oneMonth" }: { rows: CashFlowRow[
         )}
         <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => `${Math.round(Number(value) / 1000000)}jt`} width={48} />
         <Tooltip formatter={(value, name) => [money(Number(value)), name === "cashIn" || name === "Masuk" ? "Masuk" : "Keluar"]} labelFormatter={(value) => isOneDay ? `Pukul ${formatHour(value)}` : `Tanggal ${value}`} />
-        <Area type="monotone" dataKey="cashIn" name="Masuk" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} dot={isOneDay ? { r: 1.8, strokeWidth: 1 } : false} activeDot={{ r: 4 }} />
-        <Area type="monotone" dataKey="cashOut" name="Keluar" stroke="#ef4444" fill="#ef4444" fillOpacity={0.15} strokeWidth={2} dot={isOneDay ? { r: 1.8, strokeWidth: 1 } : false} activeDot={{ r: 4 }} />
+        <Area type="monotone" dataKey="cashIn" name="Masuk" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+        <Area type="monotone" dataKey="cashOut" name="Keluar" stroke="#ef4444" fill="#ef4444" fillOpacity={0.15} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
       </AreaChart>
     </ResponsiveContainer>
   );

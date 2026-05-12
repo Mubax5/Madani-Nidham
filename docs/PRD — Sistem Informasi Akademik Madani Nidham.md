@@ -189,8 +189,7 @@ Kebutuhan:
 * mengisi progres Montessori,
 * mengisi progres hafalan dan doa,
 * mengunggah portofolio dan galeri,
-* melihat agenda dan pengumuman,
-* melihat jadwal dan booking bimbel bila aktif.
+* melihat agenda dan pengumuman.
 
 ## 5.5 Orang Tua / Wali Murid
 
@@ -249,7 +248,6 @@ Kebutuhan:
 * Pusat Keuangan.
 * Audit uang masuk dan keluar.
 * Gaji guru.
-* Bimbel.
 * Notifikasi.
 * AI chat dan riwayat pemakaian.
 * Pengaturan sekolah dan website.
@@ -286,6 +284,7 @@ Kebutuhan:
 * Sinkronisasi offline penuh.
 * Video learning.
 * Chat realtime antar user.
+* Program tambahan privat di luar sistem utama.
 * Integrasi WhatsApp Business resmi.
 * Tanda tangan digital tersertifikasi production.
 * Integrasi sistem pendidikan pemerintah otomatis.
@@ -302,6 +301,8 @@ Kebutuhan:
 6. Pusat Keuangan harus membaca semua sumber uang yang relevan.
 7. AI tidak boleh menjawab angka atau fakta tanpa dukungan data sistem.
 8. Mobile app harus memakai API yang sama agar data konsisten.
+9. Login Google hanya boleh aktif setelah user login email-password lalu verifikasi akun Google dari profil.
+10. Session API tidak kedaluwarsa otomatis, tetapi berhenti saat logout atau password diganti.
 
 ---
 
@@ -356,11 +357,7 @@ Komponen utama:
 
 * PPDB
 
-## 9.5 Program
-
-* Bimbel
-
-## 9.6 Keuangan
+## 9.5 Keuangan
 
 * Pusat Keuangan
 * SPP
@@ -368,11 +365,11 @@ Komponen utama:
 * Gaji Guru
 * Pengaturan Keuangan
 
-## 9.7 AI
+## 9.6 AI
 
 * History Chat
 
-## 9.8 Pengaturan
+## 9.7 Pengaturan
 
 * Pengaturan sekolah
 * Admin user
@@ -686,8 +683,8 @@ Revisi yang dibutuhkan:
 Audit di bagian bawah Pusat Keuangan:
 
 * tidak memakai card Masuk, Keluar, Net,
-* menampilkan list transaksi uang masuk dan keluar,
-* filter cepat: hari ini, 7 hari, 1 bulan, 3 bulan,
+* default menampilkan transaksi satu bulan terakhir,
+* tidak memakai filter periode di tampilan utama,
 * search berdasarkan nama, kategori, sumber, deskripsi, nominal,
 * sumber transaksi terlihat jelas,
 * waktu transaksi dan terakhir diubah terlihat.
@@ -809,26 +806,23 @@ Fitur:
 
 ---
 
-# 17. Modul Bimbel
+# 17. Program TK
 
-Fitur:
+Setiap murid wajib memiliki program TK. Program tersimpan di tabel murid dan relasi kelas agar histori kelas tetap membawa konteks program yang diambil.
 
-* sesi bimbel,
-* jadwal,
-* booking,
-* konfirmasi booking,
-* cancel,
-* complete,
-* relasi guru dan murid,
-* tampil di dashboard dan mobile.
+Program:
 
-Status:
+* Reguler: Senin-Kamis 07.30-10.30, Jumat 07.30-10.00.
+* Half Day: Senin-Kamis 07.30-13.00, Jumat 07.30-12.30.
+* Full Day: Senin-Kamis 07.30-16.00, Jumat 07.30-15.30. Dibuka untuk tahun ajaran 2026/2027.
 
-* scheduled,
-* booked,
-* confirmed,
-* completed,
-* cancelled.
+Aturan:
+
+* `students.program_type` wajib terisi.
+* `student_classes.program_type` menyimpan program saat murid ditempatkan di kelas.
+* `registrations.program_type` menyimpan pilihan program dari PPDB.
+* UI tambah/edit murid wajib menampilkan pilihan program.
+* Program harus ikut muncul di detail murid dan API mobile.
 
 ---
 
@@ -946,6 +940,13 @@ Fitur:
 * token per menit,
 * admin dapat melihat dan menghapus riwayat sesuai permission.
 
+Aturan kuota:
+
+* kuota global request dan token disimpan di environment agar dapat disesuaikan dengan limit Groq/Gemini yang dipakai,
+* orang tua mendapat bobot 1x,
+* super admin, admin, dan kepala sekolah mendapat bobot 2x dari orang tua,
+* kuota dihitung ulang dari jumlah user AI aktif supaya pembagian tetap proporsional.
+
 ---
 
 # 20. Mobile App Flutter
@@ -996,7 +997,6 @@ Menu:
 * Hafalan,
 * Portofolio,
 * Galeri,
-* Bimbel,
 * Pengumuman,
 * Agenda,
 * Profil.
@@ -1106,8 +1106,6 @@ Tabel utama:
 * `fee_payments`
 * `finance_entries`
 * `teacher_payrolls`
-* `tutoring_sessions`
-* `tutoring_bookings`
 * `school_notifications`
 * `settings`
 * `ai_chat_histories`
@@ -1120,7 +1118,9 @@ Aturan data:
 * halaman arsip harus menampilkan terakhir diubah,
 * data keuangan harus punya sumber transaksi,
 * data AI tidak boleh menjadi sumber angka utama,
-* data murid harus bisa ditelusuri dari kelas dan orang tua.
+* data murid harus bisa ditelusuri dari kelas dan orang tua,
+* `users` menyimpan status verifikasi email, Google ID, dan waktu link Google,
+* `students`, `student_classes`, dan `registrations` menyimpan `program_type`.
 
 ---
 
@@ -1343,7 +1343,6 @@ Event yang perlu notifikasi:
 * bukti bayar ditolak,
 * izin/sakit disetujui atau ditolak,
 * PPDB berubah status,
-* booking bimbel dikonfirmasi atau dibatalkan.
 
 Kanal:
 
@@ -1359,6 +1358,9 @@ Kebutuhan:
 * `.env` tidak boleh masuk Git,
 * API key hanya lewat environment variable,
 * token auth disimpan aman di mobile,
+* token auth tidak memiliki expiry otomatis, tetapi dicabut saat logout dan saat password diganti,
+* login Google wajib memakai akun Google dengan `email_verified=true`,
+* login Google hanya boleh untuk user yang sudah ada dan sudah link Google dari profil,
 * role dan permission dicek backend,
 * orang tua hanya melihat anak sendiri,
 * data keuangan hanya untuk role berizin,
@@ -1501,8 +1503,7 @@ Fokus:
 * Montessori,
 * hafalan,
 * portofolio,
-* galeri,
-* bimbel.
+* galeri.
 
 ## 33.4 Rilis 4 - AI dan Keuangan Lanjutan
 

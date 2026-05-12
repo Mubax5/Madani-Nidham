@@ -7,6 +7,11 @@ export type CurrentUser = {
   id: number;
   name: string;
   email: string;
+  phone?: string | null;
+  photoUrl?: string | null;
+  emailVerifiedAt?: string | null;
+  googleLinkedAt?: string | null;
+  lastLoginAt?: string | null;
   roles: string[];
   permissions: string[];
 };

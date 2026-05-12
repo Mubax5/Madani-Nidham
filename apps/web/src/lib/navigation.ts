@@ -45,12 +45,6 @@ export const navigationConfig: NavigationGroup[] = [
     ],
   },
   {
-    label: "Program",
-    items: [
-      { label: "Bimbel", href: "/tutoring", icon: "GraduationCap", permission: "view_tutoring" },
-    ],
-  },
-  {
     label: "Keuangan",
     items: [
       { label: "Pusat Keuangan", href: "/finance", icon: "Landmark", permission: "view_fees" },

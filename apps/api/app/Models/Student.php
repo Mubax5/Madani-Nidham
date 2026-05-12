@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Student extends Model
 {
+    protected $appends = ['program_label'];
+
     protected $fillable = [
         'nis',
         'full_name',
@@ -19,6 +21,7 @@ class Student extends Model
         'allergy_notes',
         'medical_notes',
         'join_date',
+        'program_type',
         'status',
     ];
 
@@ -37,7 +40,7 @@ class Student extends Model
     public function classes()
     {
         return $this->belongsToMany(SchoolClass::class, 'student_classes', 'student_id', 'class_id')
-            ->withPivot(['academic_year_id', 'status'])
+            ->withPivot(['academic_year_id', 'program_type', 'status'])
             ->withTimestamps();
     }
 
@@ -76,9 +79,13 @@ class Student extends Model
         return $this->hasMany(StudentFee::class);
     }
 
-    public function tutoringSessions()
+    public function getProgramLabelAttribute(): string
     {
-        return $this->hasMany(TutoringSession::class);
+        return match ($this->program_type) {
+            'half_day' => 'Half Day',
+            'full_day' => 'Full Day',
+            default => 'Reguler',
+        };
     }
 
     public function getActiveClassAttribute()

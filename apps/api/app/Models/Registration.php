@@ -13,6 +13,7 @@ class Registration extends Model
         'child_birth_date',
         'child_gender',
         'program_applied',
+        'program_type',
         'parent_name',
         'parent_phone',
         'parent_email',

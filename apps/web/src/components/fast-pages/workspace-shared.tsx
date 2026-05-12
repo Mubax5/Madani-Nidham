@@ -49,6 +49,8 @@ export type Student = {
   photoUrl?: string | null;
   address?: string | null;
   joinDate?: string | null;
+  programType?: "regular" | "half_day" | "full_day" | string;
+  programLabel?: string | null;
   status?: string;
   parents?: User[];
   classes?: SchoolClass[];
@@ -247,6 +249,15 @@ export type DashboardData = {
     total: number;
   }>;
   attendanceThisWeek: Array<{ day: string; hadir: number; tidakHadir: number }>;
+  todayAbsenceRequests?: Array<{
+    id: number;
+    date: string;
+    type: "izin" | "sakit" | string;
+    reason?: string | null;
+    status: string;
+    student?: Student | null;
+    requester?: User | null;
+  }>;
   upcomingAgendas: Agenda[];
   recentAnnouncements: Announcement[];
   actionItems?: {
@@ -317,6 +328,23 @@ export type DashboardData = {
 };
 
 export const levelOptions = ["KB", "TK A", "TK B", "TK C"];
+export const programOptions = [
+  {
+    value: "regular",
+    label: "Reguler",
+    schedule: "Senin-Kamis 07.30-10.30, Jumat 07.30-10.00",
+  },
+  {
+    value: "half_day",
+    label: "Half Day",
+    schedule: "Senin-Kamis 07.30-13.00, Jumat 07.30-12.30",
+  },
+  {
+    value: "full_day",
+    label: "Full Day",
+    schedule: "Senin-Kamis 07.30-16.00, Jumat 07.30-15.30",
+  },
+];
 export const attendanceOptions: AttendanceStatus[] = [
   "hadir",
   "izin",

@@ -42,4 +42,16 @@ return [
         'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
     ],
 
+    'ai_quota' => [
+        'global_daily_requests' => (int) env('AI_GLOBAL_DAILY_REQUESTS', 1500),
+        'global_tokens_per_minute' => (int) env('AI_GLOBAL_TOKENS_PER_MINUTE', 800000),
+    ],
+
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect_uri' => env('GOOGLE_REDIRECT_URI', env('APP_URL').'/login'),
+        'allowed_redirect_uris' => array_filter(explode(',', env('GOOGLE_ALLOWED_REDIRECT_URIS', env('GOOGLE_REDIRECT_URI', env('APP_URL').'/login')))),
+    ],
+
 ];

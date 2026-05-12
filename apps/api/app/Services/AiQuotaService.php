@@ -10,14 +10,11 @@ use Illuminate\Support\Facades\DB;
 
 class AiQuotaService
 {
-    private const GLOBAL_DAILY_REQUESTS = 1500;
-
-    private const GLOBAL_TOKENS_PER_MINUTE = 800000;
-
-    private const ROLE_DAILY_REQUESTS = [
-        'super_admin' => 1000,
-        'kepala_sekolah' => 120,
-        'admin' => 40,
+    private const ROLE_WEIGHTS = [
+        'super_admin' => 2,
+        'kepala_sekolah' => 2,
+        'admin' => 2,
+        'orang_tua' => 1,
     ];
 
     public function assertCanSend(User $user, int $estimatedTokens): array
@@ -98,33 +95,31 @@ class AiQuotaService
         }
 
         $role = $this->allowedRoleFor($user->loadMissing('roles'));
-        $parentCount = max(1, $activeUsers->filter(fn (User $item) => $this->allowedRoleFor($item) === 'orang_tua')->count());
-        $internalTotal = array_sum(self::ROLE_DAILY_REQUESTS);
-        $parentDailyLimit = max(1, intdiv(max(self::GLOBAL_DAILY_REQUESTS - $internalTotal, 0), $parentCount));
+        $totalWeight = max(1, $activeUsers->sum(fn (User $item) => self::ROLE_WEIGHTS[$this->allowedRoleFor($item)] ?? 0));
+        $globalDailyRequests = $this->globalDailyRequests();
+        $globalTokensPerMinute = $this->globalTokensPerMinute();
+        $roleWeight = self::ROLE_WEIGHTS[$role] ?? 0;
+        $baseDailyLimit = max(1, intdiv($globalDailyRequests, $totalWeight));
         $dailyLimit = match ($role) {
-            'orang_tua' => $parentDailyLimit,
-            'super_admin', 'kepala_sekolah', 'admin' => self::ROLE_DAILY_REQUESTS[$role],
+            'orang_tua', 'super_admin', 'kepala_sekolah', 'admin' => $baseDailyLimit * $roleWeight,
             default => 0,
         };
         $tokenLimit = $dailyLimit > 0
-            ? max(1000, (int) floor(self::GLOBAL_TOKENS_PER_MINUTE * ($dailyLimit / self::GLOBAL_DAILY_REQUESTS)))
+            ? max(1000, (int) floor($globalTokensPerMinute * ($dailyLimit / max($globalDailyRequests, 1))))
             : 0;
 
         return [
             'daily_request_limit' => $dailyLimit,
             'tokens_per_minute_limit' => $tokenLimit,
-            'global_daily_requests' => self::GLOBAL_DAILY_REQUESTS,
-            'global_tokens_per_minute' => self::GLOBAL_TOKENS_PER_MINUTE,
-            'weight' => $dailyLimit,
+            'global_daily_requests' => $globalDailyRequests,
+            'global_tokens_per_minute' => $globalTokensPerMinute,
+            'weight' => $roleWeight,
             'role' => $role,
             'active_ai_users' => $activeUsers->count(),
-            'parent_user_count' => $parentCount,
-            'parent_daily_request_limit' => $parentDailyLimit,
-            'total_weight' => $activeUsers->sum(fn (User $item) => match ($this->allowedRoleFor($item)) {
-                'orang_tua' => $parentDailyLimit,
-                'super_admin', 'kepala_sekolah', 'admin' => self::ROLE_DAILY_REQUESTS[$this->allowedRoleFor($item)],
-                default => 0,
-            }),
+            'parent_user_count' => $activeUsers->filter(fn (User $item) => $this->allowedRoleFor($item) === 'orang_tua')->count(),
+            'parent_daily_request_limit' => $baseDailyLimit,
+            'total_weight' => $totalWeight,
+            'distribution_note' => 'Kuota dibagi berbobot: orang tua 1x, super admin/admin/kepala sekolah 2x.',
         ];
     }
 
@@ -162,5 +157,15 @@ class AiQuotaService
         }
 
         return null;
+    }
+
+    private function globalDailyRequests(): int
+    {
+        return max(1, (int) config('services.ai_quota.global_daily_requests', 1500));
+    }
+
+    private function globalTokensPerMinute(): int
+    {
+        return max(1000, (int) config('services.ai_quota.global_tokens_per_minute', 800000));
     }
 }

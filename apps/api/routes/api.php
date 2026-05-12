@@ -11,7 +11,6 @@ use App\Http\Controllers\Api\FinanceController;
 use App\Http\Controllers\Api\GalleryController;
 use App\Http\Controllers\Api\HafalanController;
 use App\Http\Controllers\Api\PortfolioController;
-use App\Http\Controllers\Api\TutoringController;
 use App\Models\AcademicYear;
 use App\Models\AbsenceRequest;
 use App\Models\Announcement;
@@ -40,9 +39,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 Route::prefix('v1')->group(function () {
@@ -95,6 +96,29 @@ Route::prefix('v1')->group(function () {
         return url('/storage/'.$path);
     };
 
+    $studentPrograms = ['regular', 'half_day', 'full_day'];
+
+    $programSchedule = fn (string $program): array => match ($program) {
+        'half_day' => [
+            'label' => 'Half Day',
+            'weekday' => 'Senin-Kamis 07.30-13.00',
+            'friday' => 'Jumat 07.30-12.30',
+            'available_from' => null,
+        ],
+        'full_day' => [
+            'label' => 'Full Day',
+            'weekday' => 'Senin-Kamis 07.30-16.00',
+            'friday' => 'Jumat 07.30-15.30',
+            'available_from' => '2026/2027',
+        ],
+        default => [
+            'label' => 'Reguler',
+            'weekday' => 'Senin-Kamis 07.30-10.30',
+            'friday' => 'Jumat 07.30-10.00',
+            'available_from' => null,
+        ],
+    };
+
     $forgetDashboard = function () {
         Cache::forget('dashboard:v1:'.now()->toDateString());
         Cache::forget('dashboard:v2:'.now()->toDateString());
@@ -112,9 +136,87 @@ Route::prefix('v1')->group(function () {
             'phone' => $user->phone,
             'photo_url' => $user->photo_url,
             'is_active' => $user->is_active,
+            'email_verified_at' => $user->email_verified_at,
+            'google_linked_at' => $user->google_linked_at,
+            'last_login_at' => $user->last_login_at,
             'roles' => $user->roles->pluck('name')->values(),
             'permissions' => $user->getAllPermissions()->pluck('name')->values(),
         ];
+    };
+
+    $googleConfig = function (): array {
+        return [
+            'client_id' => (string) config('services.google.client_id'),
+            'client_secret' => (string) config('services.google.client_secret'),
+            'redirect_uri' => (string) config('services.google.redirect_uri'),
+            'allowed_redirect_uris' => array_values(array_unique(array_filter([
+                (string) config('services.google.redirect_uri'),
+                ...((array) config('services.google.allowed_redirect_uris', [])),
+            ]))),
+        ];
+    };
+
+    $googleRedirectUri = function (?string $redirectUri) use ($googleConfig): string {
+        $config = $googleConfig();
+        $uri = $redirectUri ?: $config['redirect_uri'];
+
+        abort_unless(in_array($uri, $config['allowed_redirect_uris'], true), 422, 'Redirect URI Google tidak diizinkan.');
+
+        return $uri;
+    };
+
+    $googleState = function (string $mode): string {
+        $payload = base64_encode(json_encode([
+            'mode' => $mode,
+            'nonce' => Str::random(24),
+            'iat' => now()->timestamp,
+        ], JSON_THROW_ON_ERROR));
+        $signature = hash_hmac('sha256', $payload, (string) config('app.key'));
+
+        return $payload.'.'.$signature;
+    };
+
+    $validateGoogleState = function (string $state, string $mode): bool {
+        [$payload, $signature] = array_pad(explode('.', $state, 2), 2, '');
+        $expected = hash_hmac('sha256', $payload, (string) config('app.key'));
+        if (! hash_equals($expected, $signature)) {
+            return false;
+        }
+
+        $decoded = json_decode(base64_decode($payload, true) ?: '', true);
+        if (! is_array($decoded) || ($decoded['mode'] ?? null) !== $mode) {
+            return false;
+        }
+
+        return now()->timestamp - (int) ($decoded['iat'] ?? 0) <= 600;
+    };
+
+    $fetchGoogleUser = function (string $code, string $redirectUri) use ($googleConfig, $googleRedirectUri): array {
+        $config = $googleConfig();
+        if ($config['client_id'] === '' || $config['client_secret'] === '') {
+            abort(422, 'Google OAuth belum dikonfigurasi.');
+        }
+        $redirectUri = $googleRedirectUri($redirectUri);
+
+        $tokenResponse = Http::asForm()->post('https://oauth2.googleapis.com/token', [
+            'code' => $code,
+            'client_id' => $config['client_id'],
+            'client_secret' => $config['client_secret'],
+            'redirect_uri' => $redirectUri,
+            'grant_type' => 'authorization_code',
+        ]);
+
+        if (! $tokenResponse->successful()) {
+            abort(422, 'Kode Google tidak valid atau sudah kedaluwarsa.');
+        }
+
+        $accessToken = $tokenResponse->json('access_token');
+        $profileResponse = Http::withToken($accessToken)->get('https://openidconnect.googleapis.com/v1/userinfo');
+        if (! $profileResponse->successful()) {
+            abort(422, 'Profil Google gagal diambil.');
+        }
+
+        return $profileResponse->json();
     };
 
     Route::post('/auth/login', function (Request $request) use ($userPayload) {
@@ -130,7 +232,11 @@ Route::prefix('v1')->group(function () {
         }
 
         Auth::login($user);
-        $user->forceFill(['last_login_at' => now()])->save();
+        $user->forceFill([
+            'last_login_at' => now(),
+            'last_login_ip' => $request->ip(),
+            'last_login_user_agent' => Str::limit((string) $request->userAgent(), 500, ''),
+        ])->save();
         $token = $user->createToken('madani-dashboard')->plainTextToken;
 
         Log::info('User login', ['user_id' => $user->id]);
@@ -139,14 +245,76 @@ Route::prefix('v1')->group(function () {
             'user' => $userPayload($user),
             'token' => $token,
         ], 'Login berhasil.');
-    });
+    })->middleware('throttle:10,1');
 
-    Route::post('/registrations', function (Request $request) use ($activeYear, $upload, $forgetDashboard) {
+    Route::get('/auth/google/url', function (Request $request) use ($googleConfig, $googleState, $googleRedirectUri) {
+        $data = $request->validate([
+            'mode' => ['nullable', Rule::in(['login', 'link'])],
+            'redirectUri' => ['nullable', 'url'],
+        ]);
+        $config = $googleConfig();
+        if ($config['client_id'] === '' || $config['client_secret'] === '') {
+            return ApiResponse::error('Google OAuth belum dikonfigurasi. Isi GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, dan GOOGLE_REDIRECT_URI.', [], 422);
+        }
+
+        $redirectUri = $googleRedirectUri($data['redirectUri'] ?? null);
+        $query = http_build_query([
+            'client_id' => $config['client_id'],
+            'redirect_uri' => $redirectUri,
+            'response_type' => 'code',
+            'scope' => 'openid email profile',
+            'state' => $googleState($data['mode'] ?? 'login'),
+            'prompt' => 'select_account',
+        ]);
+
+        return ApiResponse::success(['url' => 'https://accounts.google.com/o/oauth2/v2/auth?'.$query], 'URL login Google berhasil dibuat.');
+    })->middleware('throttle:20,1');
+
+    Route::post('/auth/google/login', function (Request $request) use ($fetchGoogleUser, $validateGoogleState, $userPayload) {
+        $data = $request->validate([
+            'code' => ['required', 'string'],
+            'state' => ['required', 'string'],
+            'redirectUri' => ['required', 'url'],
+        ]);
+        if (! $validateGoogleState($data['state'], 'login')) {
+            return ApiResponse::error('State Google tidak valid. Ulangi login.', [], 422);
+        }
+
+        $profile = $fetchGoogleUser($data['code'], $data['redirectUri']);
+        if (! ($profile['email_verified'] ?? false)) {
+            return ApiResponse::error('Akun Google belum terverifikasi.', [], 403);
+        }
+
+        $user = User::where('email', $profile['email'] ?? '')->first();
+        if (! $user || ! $user->is_active || ! $user->google_id || ! $user->email_verified_at) {
+            return ApiResponse::error('Login Google belum aktif. Login email-password dulu, lalu verifikasi Google dari profil.', [], 403);
+        }
+        if (! hash_equals((string) $user->google_id, (string) ($profile['sub'] ?? ''))) {
+            return ApiResponse::error('Akun Google tidak cocok dengan profil yang sudah diverifikasi.', [], 403);
+        }
+
+        $user->forceFill([
+            'last_login_at' => now(),
+            'last_login_ip' => $request->ip(),
+            'last_login_user_agent' => Str::limit((string) $request->userAgent(), 500, ''),
+        ])->save();
+        $token = $user->createToken('madani-dashboard')->plainTextToken;
+
+        return ApiResponse::success(['user' => $userPayload($user), 'token' => $token], 'Login Google berhasil.');
+    })->middleware('throttle:10,1');
+
+    Route::get('/school/programs', fn () => ApiResponse::success(collect($studentPrograms)->map(fn (string $program) => [
+        'value' => $program,
+        ...$programSchedule($program),
+    ])->values(), 'Program sekolah berhasil diambil.'));
+
+    Route::post('/registrations', function (Request $request) use ($activeYear, $upload, $forgetDashboard, $studentPrograms) {
         $data = $request->validate([
             'childName' => ['required', 'string', 'max:150'],
             'childBirthDate' => ['required', 'date'],
             'childGender' => ['required', Rule::in(['L', 'P'])],
             'programApplied' => ['required', Rule::in(['KB', 'TK A', 'TK B', 'TK C'])],
+            'programType' => ['required', Rule::in($studentPrograms)],
             'parentName' => ['required', 'string', 'max:150'],
             'parentPhone' => ['required', 'string', 'max:20'],
             'parentEmail' => ['required', 'email', 'max:150'],
@@ -168,6 +336,7 @@ Route::prefix('v1')->group(function () {
             'child_birth_date' => $data['childBirthDate'],
             'child_gender' => $data['childGender'],
             'program_applied' => $data['programApplied'],
+            'program_type' => $data['programType'],
             'parent_name' => $data['parentName'],
             'parent_phone' => $data['parentPhone'],
             'parent_email' => $data['parentEmail'],
@@ -189,7 +358,7 @@ Route::prefix('v1')->group(function () {
         return ApiResponse::success($registration, 'Status pendaftaran berhasil diambil.');
     });
 
-    Route::middleware('auth:sanctum')->group(function () use ($perPage, $activeYear, $settingValue, $storeSetting, $upload, $userPayload, $forgetDashboard) {
+    Route::middleware('auth:sanctum')->group(function () use ($perPage, $activeYear, $settingValue, $storeSetting, $upload, $userPayload, $forgetDashboard, $fetchGoogleUser, $validateGoogleState, $studentPrograms) {
         Route::post('/auth/logout', function (Request $request) {
             $request->user()->currentAccessToken()?->delete();
             Auth::guard('web')->logout();
@@ -220,10 +389,49 @@ Route::prefix('v1')->group(function () {
                 return ApiResponse::error('Password lama tidak sesuai.', ['currentPassword' => ['Password lama tidak sesuai.']], 422);
             }
 
-            $request->user()->update(['password' => $data['password']]);
+            $request->user()->update([
+                'password' => $data['password'],
+                'password_changed_at' => now(),
+            ]);
+            $request->user()->tokens()->delete();
 
-            return ApiResponse::success(null, 'Password berhasil diubah.');
+            return ApiResponse::success(null, 'Password berhasil diubah. Silakan login ulang.');
         });
+
+        Route::post('/auth/google/link', function (Request $request) use ($fetchGoogleUser, $validateGoogleState, $userPayload) {
+            $data = $request->validate([
+                'code' => ['required', 'string'],
+                'state' => ['required', 'string'],
+                'redirectUri' => ['required', 'url'],
+            ]);
+            if (! $validateGoogleState($data['state'], 'link')) {
+                return ApiResponse::error('State Google tidak valid. Ulangi verifikasi.', [], 422);
+            }
+
+            $profile = $fetchGoogleUser($data['code'], $data['redirectUri']);
+            if (! ($profile['email_verified'] ?? false)) {
+                return ApiResponse::error('Akun Google belum terverifikasi.', [], 403);
+            }
+            if (! hash_equals(Str::lower($request->user()->email), Str::lower((string) ($profile['email'] ?? '')))) {
+                return ApiResponse::error('Email Google harus sama dengan email akun Madani Nidham.', [], 422);
+            }
+
+            $taken = User::where('google_id', $profile['sub'] ?? null)
+                ->where('id', '!=', $request->user()->id)
+                ->exists();
+            if ($taken) {
+                return ApiResponse::error('Akun Google sudah dipakai user lain.', [], 422);
+            }
+
+            $request->user()->forceFill([
+                'google_id' => (string) $profile['sub'],
+                'google_avatar_url' => $profile['picture'] ?? null,
+                'email_verified_at' => $request->user()->email_verified_at ?? now(),
+                'google_linked_at' => now(),
+            ])->save();
+
+            return ApiResponse::success($userPayload($request->user()->fresh('roles')), 'Akun Google berhasil diverifikasi.');
+        })->middleware('throttle:10,1');
 
         Route::put('/auth/fcm-token', function (Request $request) {
             $data = $request->validate(['fcmToken' => ['nullable', 'string', 'max:500']]);
@@ -397,13 +605,14 @@ Route::prefix('v1')->group(function () {
             ];
         };
 
-        Route::get('/dashboard', function () use ($attendanceByClass, $weeklyAttendanceTrend, $montessoriSummary, $hafalanSummary, $classCapacity, $dashboardActionItems) {
+        Route::get('/dashboard', function (Request $request) use ($attendanceByClass, $weeklyAttendanceTrend, $montessoriSummary, $hafalanSummary, $classCapacity, $dashboardActionItems) {
             $today = now()->toDateString();
             $weekStart = now()->startOfWeek()->toDateString();
             $weekEnd = now()->startOfWeek()->addDays(5)->toDateString();
-            $cacheKey = "dashboard:v4:$today";
+            $user = $request->user()->loadMissing('roles');
+            $cacheKey = 'dashboard:v5:'.$today.':'.$user->id;
 
-            $payload = Cache::remember($cacheKey, now()->addSeconds(30), function () use ($today, $weekStart, $weekEnd, $attendanceByClass, $weeklyAttendanceTrend, $montessoriSummary, $hafalanSummary, $classCapacity, $dashboardActionItems) {
+            $payload = Cache::remember($cacheKey, now()->addSeconds(30), function () use ($today, $weekStart, $weekEnd, $attendanceByClass, $weeklyAttendanceTrend, $montessoriSummary, $hafalanSummary, $classCapacity, $dashboardActionItems, $user) {
                 $todayAttendance = Attendance::query()
                     ->whereDate('date', $today)
                     ->selectRaw("
@@ -455,6 +664,15 @@ Route::prefix('v1')->group(function () {
                 $hafalanProgress = $hafalanSummary();
 
                 $studentsPerClass = $classCapacity();
+                $canSeeAbsenceRequests = $user->hasAnyRole(['super_admin', 'kepala_sekolah', 'admin', 'guru']);
+                $todayAbsenceRequests = $canSeeAbsenceRequests
+                    ? AbsenceRequest::with(['student.classes', 'requester'])
+                        ->whereDate('date', $today)
+                        ->when($user->hasRole('guru') && ! $user->hasAnyRole(['super_admin', 'kepala_sekolah', 'admin']), fn ($query) => $query->whereHas('student.classes', fn ($classQuery) => $classQuery->where('classes.teacher_id', $user->id)))
+                        ->latest('id')
+                        ->limit(8)
+                        ->get()
+                    : collect();
 
                 $currentFeeQuery = StudentFee::where('month', now()->month)->where('year', now()->year);
                 $financeTarget = (int) (clone $currentFeeQuery)->sum('total_billed');
@@ -492,6 +710,7 @@ Route::prefix('v1')->group(function () {
                     'journals_today' => Journal::where('date', $today)->count(),
                     'pending_registrations' => Registration::where('status', 'pending')->count(),
                     'attendance_by_class' => $attendanceByClass($today),
+                    'today_absence_requests' => $todayAbsenceRequests,
                     'upcoming_agendas' => SchoolAgenda::whereBetween('start_date', [$today, now()->addDays(14)->toDateString()])->orderBy('start_date')->limit(6)->get(),
                     'recent_announcements' => Announcement::whereNotNull('published_at')->latest('published_at')->limit(3)->get(),
                     'attendance_this_week' => $week,
@@ -654,10 +873,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/classes/{id}/students', function (Request $request, int $id) {
             $class = SchoolClass::findOrFail($id);
             $data = $request->validate(['studentId' => ['required', 'exists:students,id']]);
+            $student = Student::findOrFail($data['studentId']);
 
             DB::table('student_classes')->updateOrInsert(
                 ['student_id' => $data['studentId'], 'academic_year_id' => $class->academic_year_id],
-                ['class_id' => $class->id, 'status' => 'active', 'created_at' => now(), 'updated_at' => now()],
+                ['class_id' => $class->id, 'program_type' => $student->program_type ?? 'regular', 'status' => 'active', 'created_at' => now(), 'updated_at' => now()],
             );
 
             return ApiResponse::success($class->students()->get(), 'Murid berhasil dimasukkan ke kelas.');
@@ -668,17 +888,23 @@ Route::prefix('v1')->group(function () {
 
             if ($request->filled('search')) {
                 $search = $request->string('search');
-                $query->where(fn ($q) => $q->where('full_name', 'like', "%$search%")->orWhere('nis', 'like', "%$search%"));
+                $query->where(fn ($q) => $q
+                    ->where('full_name', 'like', "%$search%")
+                    ->orWhere('nis', 'like', "%$search%")
+                    ->orWhere('program_type', 'like', "%$search%"));
             }
 
             if ($request->filled('status')) {
                 $query->where('status', $request->string('status'));
             }
+            if ($request->filled('programType')) {
+                $query->where('program_type', $request->string('programType'));
+            }
 
             return ApiResponse::fromPaginator($query->paginate($perPage($request)), 'Murid berhasil diambil.');
         });
 
-        Route::post('/students', function (Request $request) use ($activeYear, $forgetDashboard) {
+        Route::post('/students', function (Request $request) use ($activeYear, $forgetDashboard, $studentPrograms) {
             $data = $request->validate([
                 'nis' => ['nullable', 'string', 'max:20', 'unique:students,nis'],
                 'fullName' => ['required', 'string', 'max:150'],
@@ -688,6 +914,7 @@ Route::prefix('v1')->group(function () {
                 'gender' => ['required', Rule::in(['L', 'P'])],
                 'address' => ['nullable', 'string'],
                 'joinDate' => ['required', 'date'],
+                'programType' => ['required', Rule::in($studentPrograms)],
                 'status' => ['nullable', Rule::in(['active', 'inactive', 'alumni'])],
                 'classId' => ['nullable', 'exists:classes,id'],
                 'parentName' => ['nullable', 'string', 'max:150'],
@@ -705,6 +932,7 @@ Route::prefix('v1')->group(function () {
                 'gender' => $data['gender'],
                 'address' => $data['address'] ?? null,
                 'join_date' => $data['joinDate'],
+                'program_type' => $data['programType'],
                 'status' => $data['status'] ?? 'active',
             ]);
 
@@ -721,7 +949,7 @@ Route::prefix('v1')->group(function () {
                 $class = SchoolClass::findOrFail($data['classId']);
                 DB::table('student_classes')->updateOrInsert(
                     ['student_id' => $student->id, 'academic_year_id' => $class->academic_year_id],
-                    ['class_id' => $class->id, 'status' => 'active', 'created_at' => now(), 'updated_at' => now()],
+                    ['class_id' => $class->id, 'program_type' => $data['programType'], 'status' => 'active', 'created_at' => now(), 'updated_at' => now()],
                 );
             } elseif ($year = $activeYear()) {
                 DB::table('student_classes')->where('student_id', $student->id)->where('academic_year_id', $year->id);
@@ -753,7 +981,7 @@ Route::prefix('v1')->group(function () {
             return ApiResponse::success($student->fresh(['parents', 'classes']), 'Foto murid berhasil diperbarui.');
         })->middleware('permission:edit_students|update_student_milestones|update_student_hafalan');
 
-        Route::put('/students/{student}', function (Request $request, Student $student) use ($activeYear, $forgetDashboard) {
+        Route::put('/students/{student}', function (Request $request, Student $student) use ($activeYear, $forgetDashboard, $studentPrograms) {
             $data = $request->validate([
                 'nis' => ['nullable', 'string', 'max:20', Rule::unique('students', 'nis')->ignore($student->id)],
                 'fullName' => ['required', 'string', 'max:150'],
@@ -763,6 +991,7 @@ Route::prefix('v1')->group(function () {
                 'gender' => ['required', Rule::in(['L', 'P'])],
                 'address' => ['nullable', 'string'],
                 'joinDate' => ['required', 'date'],
+                'programType' => ['required', Rule::in($studentPrograms)],
                 'status' => ['required', Rule::in(['active', 'inactive', 'alumni'])],
                 'classId' => ['nullable', 'exists:classes,id'],
             ]);
@@ -776,6 +1005,7 @@ Route::prefix('v1')->group(function () {
                 'gender' => $data['gender'],
                 'address' => $data['address'] ?? null,
                 'join_date' => $data['joinDate'],
+                'program_type' => $data['programType'],
                 'status' => $data['status'],
             ]);
 
@@ -783,7 +1013,7 @@ Route::prefix('v1')->group(function () {
                 $class = SchoolClass::findOrFail($data['classId']);
                 DB::table('student_classes')->updateOrInsert(
                     ['student_id' => $student->id, 'academic_year_id' => $class->academic_year_id ?? $activeYear()?->id],
-                    ['class_id' => $class->id, 'status' => 'active', 'created_at' => now(), 'updated_at' => now()],
+                    ['class_id' => $class->id, 'program_type' => $data['programType'], 'status' => 'active', 'created_at' => now(), 'updated_at' => now()],
                 );
             }
 
@@ -1578,6 +1808,7 @@ Route::prefix('v1')->group(function () {
                 'gender' => $registration->child_gender,
                 'address' => $registration->address,
                 'join_date' => now()->toDateString(),
+                'program_type' => $registration->program_type ?? 'regular',
                 'status' => 'active',
             ]);
 
@@ -1591,7 +1822,7 @@ Route::prefix('v1')->group(function () {
             $class = SchoolClass::findOrFail($data['classId']);
             DB::table('student_classes')->updateOrInsert(
                 ['student_id' => $student->id, 'academic_year_id' => $class->academic_year_id ?? $activeYear()?->id],
-                ['class_id' => $class->id, 'status' => 'active', 'created_at' => now(), 'updated_at' => now()],
+                ['class_id' => $class->id, 'program_type' => $student->program_type, 'status' => 'active', 'created_at' => now(), 'updated_at' => now()],
             );
 
             $registration->update([
@@ -1717,16 +1948,6 @@ Route::prefix('v1')->group(function () {
         Route::post('/finance/payrolls', [FinanceController::class, 'storePayroll'])->middleware('permission:manage_fees');
         Route::put('/finance/payrolls/{payroll}', [FinanceController::class, 'updatePayroll'])->middleware('permission:manage_fees');
         Route::delete('/finance/payrolls/{payroll}', [FinanceController::class, 'deletePayroll'])->middleware('permission:manage_fees');
-
-        Route::get('/tutoring/sessions', [TutoringController::class, 'sessions'])->middleware('permission:view_tutoring');
-        Route::post('/tutoring/sessions', [TutoringController::class, 'storeSession'])->middleware('permission:manage_tutoring');
-        Route::put('/tutoring/sessions/{session}', [TutoringController::class, 'updateSession'])->middleware('permission:manage_tutoring');
-        Route::put('/tutoring/sessions/{session}/complete', [TutoringController::class, 'complete'])->middleware('permission:manage_tutoring|view_tutoring');
-        Route::put('/tutoring/sessions/{session}/cancel', [TutoringController::class, 'cancel'])->middleware('permission:manage_tutoring');
-        Route::get('/tutoring/schedule', [TutoringController::class, 'schedule'])->middleware('permission:view_tutoring');
-        Route::post('/tutoring/bookings', [TutoringController::class, 'storeBooking'])->middleware('permission:view_tutoring');
-        Route::get('/tutoring/bookings', [TutoringController::class, 'bookings'])->middleware('permission:manage_tutoring');
-        Route::put('/tutoring/bookings/{booking}/confirm', [TutoringController::class, 'confirmBooking'])->middleware('permission:manage_tutoring');
 
         Route::get('/notifications', fn (Request $request) => ApiResponse::fromPaginator(SchoolNotification::where('user_id', $request->user()->id)->latest('id')->paginate($perPage($request)), 'Notifikasi berhasil diambil.'));
 

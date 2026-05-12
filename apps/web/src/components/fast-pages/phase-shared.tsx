@@ -10,7 +10,7 @@ import { apiFetch, ApiResponse } from "@/lib/api";
 import { formatRupiah } from "@/lib/format-currency";
 
 export type User = { id: number; name: string; email?: string; roles?: string[] };
-export type Student = { id: number; fullName: string; nickname?: string | null; nis?: string | null; photoUrl?: string | null; classes?: SchoolClass[] };
+export type Student = { id: number; fullName: string; nickname?: string | null; nis?: string | null; photoUrl?: string | null; programType?: string | null; programLabel?: string | null; classes?: SchoolClass[] };
 export type SchoolClass = { id: number; name: string; level: string; teacher?: User | null; studentsCount?: number };
 export type MontessoriArea = { id: number; name: string };
 export type HafalanSurah = {
@@ -153,27 +153,6 @@ export type FinanceOverview = {
   cashFlow: Record<"threeMonths" | "oneMonth" | "sevenDays" | "oneDay", Array<{ key: string; label: string; time?: number | null; cashIn: number; cashOut: number; netCash: number }>>;
   recentEntries: FinanceEntry[];
   payrolls: TeacherPayroll[];
-};
-export type TutoringSession = {
-  id: number;
-  type: string;
-  scheduledAt: string;
-  durationMinutes: number;
-  status: string;
-  sessionNotes?: string | null;
-  homeworkNotes?: string | null;
-  student?: Student | null;
-  teacher?: User | null;
-};
-export type TutoringBooking = {
-  id: number;
-  type: string;
-  preferredAt: string;
-  notes?: string | null;
-  status: string;
-  student?: Student | null;
-  teacher?: User | null;
-  requester?: User | null;
 };
 export type AiHistory = { id: number; role: "user" | "model"; message: string; tokensUsed?: number | null; createdAt?: string; user?: User | null; student?: Student | null };
 export type AiUsage = {

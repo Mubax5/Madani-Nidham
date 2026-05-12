@@ -12,7 +12,6 @@ import {
   FileText,
   GalleryHorizontal,
   Globe,
-  GraduationCap,
   Heart,
   Image as ImageIcon,
   Landmark,
@@ -62,7 +61,6 @@ const iconMap = {
   ClipboardList,
   Heart,
   Wallet,
-  GraduationCap,
   UserCog,
   Settings,
   ShieldCheck,
@@ -403,6 +401,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [aiQuota, setAiQuota] = useState<AiHistoryPayload["quota"]>();
   const [aiLoading, setAiLoading] = useState(false);
   const [aiHistoryLoading, setAiHistoryLoading] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [googleLinkLoading, setGoogleLinkLoading] = useState(false);
   const aiScrollRef = useRef<HTMLDivElement | null>(null);
   const aiInputRef = useRef<HTMLInputElement | null>(null);
   const permissions = usePermissions();
@@ -526,6 +526,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     clearToken();
     toast.success("Logout berhasil");
     router.replace("/login");
+  }
+
+  async function startGoogleLink() {
+    setGoogleLinkLoading(true);
+    try {
+      const redirectUri = `${window.location.origin}/login`;
+      const response = await apiFetch<{ url: string }>(
+        `/auth/google/url?mode=link&redirectUri=${encodeURIComponent(redirectUri)}`,
+      );
+      window.location.href = response.data.url;
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Google OAuth belum dikonfigurasi",
+      );
+      setGoogleLinkLoading(false);
+    }
   }
 
   function hideAi() {
@@ -754,7 +772,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               </div>
               <button
                 type="button"
-                onClick={() => toast.info("Profil belum tersedia")}
+                onClick={() => setProfileOpen(true)}
                 className="mt-2 flex h-9 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-[#0a1f5c] transition hover:bg-slate-50"
               >
                 <UserCog className="h-4 w-4" />
@@ -775,6 +793,80 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+      {profileOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4">
+          <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-extrabold uppercase text-[#64748b]">
+                  Profil akun
+                </p>
+                <h2 className="font-display mt-1 text-2xl font-extrabold text-[#0a1f5c]">
+                  {user?.name ?? "Profil"}
+                </h2>
+                <p className="mt-1 text-sm font-semibold text-[#64748b]">
+                  {user?.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProfileOpen(false)}
+                className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-[#0a1f5c] hover:bg-slate-50"
+                aria-label="Tutup profil"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-5 grid gap-2">
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
+                <span className="text-sm font-semibold text-[#0a1f5c]">
+                  Email sistem
+                </span>
+                <span
+                  className={`rounded-full px-2 py-1 text-[11px] font-bold ${
+                    user?.emailVerifiedAt
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-amber-50 text-amber-700"
+                  }`}
+                >
+                  {user?.emailVerifiedAt ? "Terverifikasi" : "Belum"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
+                <span className="text-sm font-semibold text-[#0a1f5c]">
+                  Login Google
+                </span>
+                <span
+                  className={`rounded-full px-2 py-1 text-[11px] font-bold ${
+                    user?.googleLinkedAt
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {user?.googleLinkedAt ? "Aktif" : "Belum aktif"}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={startGoogleLink}
+              disabled={googleLinkLoading}
+              className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0a1f5c] text-sm font-extrabold text-white transition hover:bg-[#123c8c] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <BadgeCheck className="h-4 w-4" />
+              {googleLinkLoading
+                ? "Membuka Google..."
+                : user?.googleLinkedAt
+                  ? "Verifikasi ulang Google"
+                  : "Verifikasi email dengan Google"}
+            </button>
+            <p className="mt-3 text-xs leading-5 text-[#64748b]">
+              Pakai akun Google dengan email yang sama. Google harus memberi
+              status email terverifikasi.
+            </p>
+          </section>
+        </div>
+      ) : null}
       {canUseAi && !aiHidden ? (
         <div className="fixed bottom-4 right-4 z-40 lg:right-6">
           {aiOpen ? (

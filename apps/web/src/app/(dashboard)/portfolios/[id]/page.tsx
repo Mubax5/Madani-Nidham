@@ -1,12 +1,11 @@
-"use client";
+import { PortfolioDetailPage as Workspace } from "@/components/phase2-pages";
 
-import dynamic from "next/dynamic";
+export default async function PortfolioDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
 
-const Workspace = dynamic(
-  () => import("@/components/phase2-pages").then((mod) => mod.PortfolioDetailPage),
-  { ssr: false, loading: () => <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm font-semibold text-[#64748b]">Memuat detail portofolio.</div> },
-);
-
-export default function PortfolioDetailPage({ params }: { params: { id: string } }) {
-  return <Workspace id={Number(params.id)} />;
+  return <Workspace id={Number(id)} />;
 }

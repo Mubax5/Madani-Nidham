@@ -5176,6 +5176,11 @@ export function AgendasPage() {
   function chooseAgendaDate(date: string) {
     setSelectedDate(date);
     resetAgendaForm(date);
+  }
+
+  function openCreateAgenda(date = selectedDate || todayInput()) {
+    resetAgendaForm(date);
+    setSelectedDate(date);
     setFormOpen(true);
   }
 
@@ -5271,6 +5276,14 @@ export function AgendasPage() {
               }}
             />
           </div>
+          <button
+            type="button"
+            onClick={() => openCreateAgenda()}
+            className="madani-button bg-[#0a1f5c] text-white"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Tambah agenda
+          </button>
         </div>
       </PageHeader>
 
@@ -5358,6 +5371,35 @@ export function AgendasPage() {
               : `${agendas.length} agenda tampil.`
           }
         >
+          {selectedDate ? (
+            <div className="mb-3 flex flex-col gap-2 rounded-xl border border-[#0a1f5c]/10 bg-[#0a1f5c]/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase text-[#64748b]">
+                  Filter tanggal aktif
+                </p>
+                <p className="text-sm font-semibold text-[#0a1f5c]">
+                  {formatDate(selectedDate)}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => openCreateAgenda(selectedDate)}
+                  className="madani-button bg-[#0a1f5c] text-white"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Agenda tanggal ini
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate("")}
+                  className="madani-button border border-slate-200 bg-white text-[#0a1f5c]"
+                >
+                  Lihat semua bulan ini
+                </button>
+              </div>
+            </div>
+          ) : null}
           <CategoryTabs
             value={agendaTypeFilter}
             onChange={setAgendaTypeFilter}
@@ -5444,7 +5486,7 @@ export function AgendasPage() {
           />
         </Panel>
 
-        <Panel title="Kalender" description="Klik tanggal untuk tambah agenda.">
+        <Panel title="Kalender" description="Klik tanggal untuk filter. Tambah agenda pakai tombol aksi.">
           <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-[#64748b]">
             {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((day) => (
               <span key={day}>{day}</span>

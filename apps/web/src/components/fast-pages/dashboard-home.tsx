@@ -8,11 +8,11 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, Banknote, Bell, CalendarDays, CalendarOff, Check, ChevronRight, ClipboardCheck, Moon, NotebookPen, Settings, Sparkles, Star, Trophy, UserRoundCog, Users, Wallet } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { usePermissions } from "@/lib/use-permissions";
 import { EmptyState, StatusBadge, formatDate, formatMoney, statusLabel, type Agenda, type Announcement, type DashboardData } from "./workspace-shared";
 
 const WeeklyAttendanceTrend = dynamic(() => import("./dashboard-charts").then((mod) => mod.WeeklyAttendanceTrend), { ssr: false, loading: () => <ChartLoading /> });
 const MontessoriProgressChart = dynamic(() => import("./dashboard-charts").then((mod) => mod.MontessoriProgressChart), { ssr: false, loading: () => <ChartLoading /> });
-const ClassCapacityChart = dynamic(() => import("./dashboard-charts").then((mod) => mod.ClassCapacityChart), { ssr: false, loading: () => <ChartLoading /> });
 const HafalanDonutChart = dynamic(() => import("./dashboard-charts").then((mod) => mod.HafalanDonutChart), { ssr: false, loading: () => <ChartLoading /> });
 
 function ChartLoading() {
@@ -22,6 +22,7 @@ function ChartLoading() {
 
 export function DashboardHome() {
   const [mounted, setMounted] = useState(false);
+  const { hasRole } = usePermissions();
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => apiFetch<DashboardData>("/dashboard"),
@@ -29,6 +30,11 @@ export function DashboardHome() {
   useEffect(() => setMounted(true), []);
   const stats = data?.data;
   const totalStudents = stats?.totalActiveStudents ?? 0;
+  const canSeeAbsenceRequests =
+    hasRole("super_admin") ||
+    hasRole("kepala_sekolah") ||
+    hasRole("admin") ||
+    hasRole("guru");
 
   const daily = [
     {
@@ -124,16 +130,17 @@ export function DashboardHome() {
 
       <div className="border-t border-slate-200 pt-6">
         <DashboardSectionHeader title="Snapshot Hari Ini" />
-        <section className="grid items-start gap-4 xl:grid-cols-2">
+        <section className={`grid items-start gap-4 ${canSeeAbsenceRequests ? "xl:grid-cols-2" : ""}`}>
           <DashboardAttendanceByClass
             rows={stats?.attendanceByClass ?? []}
             isLoading={isLoading}
           />
-          <DashboardAgendaList
-            agendas={stats?.upcomingAgendas ?? []}
-            announcements={stats?.recentAnnouncements ?? []}
-            isLoading={isLoading}
-          />
+          {canSeeAbsenceRequests ? (
+            <DashboardAbsenceRequests
+              requests={stats?.todayAbsenceRequests ?? []}
+              isLoading={isLoading}
+            />
+          ) : null}
         </section>
 
         <section id="analytics" className="mt-6 scroll-mt-20">
@@ -149,10 +156,7 @@ export function DashboardHome() {
                 mounted={mounted}
                 rows={stats?.analytics?.milestoneProgress ?? []}
               />
-              <ClassCapacityChart
-                mounted={mounted}
-                rows={stats?.analytics?.studentsPerClass ?? []}
-              />
+              <ActionItemList actionItems={stats?.actionItems} />
             </div>
           </div>
         </section>
@@ -165,7 +169,10 @@ export function DashboardHome() {
               mounted={mounted}
               rows={stats?.analytics?.hafalanProgress ?? []}
             />
-            <ActionItemList actionItems={stats?.actionItems} />
+            <DashboardAnnouncementList
+              announcements={stats?.recentAnnouncements ?? []}
+              isLoading={isLoading}
+            />
           </div>
         </section>
 
@@ -264,7 +271,7 @@ function DashboardAttendanceByClass({
   return (
     <DashboardCard
       title="Kehadiran Hari Ini"
-      subtitle="Status absensi murid aktif per kelas — diperbarui otomatis"
+      subtitle="Status absensi murid aktif per kelas - diperbarui otomatis"
     >
       {rows.length > 0 ? (
         <div className="grid gap-2.5">
@@ -348,77 +355,47 @@ function DashboardAttendanceByClass({
   );
 }
 
-function DashboardAgendaList({
-  agendas,
-  announcements,
+function DashboardAbsenceRequests({
+  requests,
   isLoading,
 }: {
-  agendas: Agenda[];
-  announcements: Announcement[];
+  requests: NonNullable<DashboardData["todayAbsenceRequests"]>;
   isLoading: boolean;
 }) {
-  const items = [
-    ...agendas.map((agenda) => ({
-      id: `agenda-${agenda.id}`,
-      title: agenda.title,
-      date: agenda.startDate,
-      meta: agenda.location || "Agenda sekolah",
-      type: agenda.type,
-      isAnnouncement: false,
-    })),
-    ...announcements.map((announcement) => ({
-      id: `announcement-${announcement.id}`,
-      title: announcement.title,
-      date: announcement.publishedAt ?? null,
-      meta: "Pengumuman",
-      type: "pengumuman",
-      isAnnouncement: true,
-    })),
-  ].slice(0, 6);
-
   return (
     <DashboardCard
-      title="Jadwal Terdekat"
-      subtitle="Agenda sekolah dan pengumuman aktif dalam 14 hari ke depan"
+      title="Perizinan Orang Tua Hari Ini"
+      subtitle="Izin dan sakit yang masuk dari orang tua"
     >
-      {items.length > 0 ? (
+      {requests.length > 0 ? (
         <div className="grid">
-          {items.map((item) => {
-            const meta = agendaTypeMeta(item.type);
-            const Icon = meta.icon;
-            const badge = item.isAnnouncement ? null : relativeDayBadge(item.date);
-
-            return (
-              <div
-                key={item.id}
-                className="flex items-start gap-3 border-b border-slate-200/70 py-2.5 last:border-0"
-              >
-                <span
-                  className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg ${meta.className}`}
-                >
-                  <Icon className="h-4 w-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <p className="min-w-0 truncate text-sm font-medium text-slate-900">
-                      {item.title}
-                    </p>
-                    {badge ? (
-                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                        {badge}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-0.5 text-xs text-[#64748b]">
-                    {item.date ? formatDate(item.date) : "Aktif"} · {item.meta}
+          {requests.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-start gap-3 border-b border-slate-200/70 py-2.5 last:border-0"
+            >
+              <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-700">
+                <CalendarOff className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <p className="min-w-0 truncate text-sm font-medium text-slate-900">
+                    {item.student?.fullName ?? "Murid"}
                   </p>
+                  <StatusBadge value={item.status} />
                 </div>
+                <p className="mt-0.5 text-xs text-[#64748b]">
+                  {statusLabel(item.type)} / {item.requester?.name ?? "Orang tua"}
+                </p>
+                <p className="mt-1 line-clamp-2 text-xs text-[#334155]">
+                  {item.reason ?? "Tanpa catatan."}
+                </p>
               </div>
-            );
-          })}
-          {(agendas.length + announcements.length) > 6 ? (
+            </div>
+          ))}
+          {requests.length > 6 ? (
             <Link
-              href="/agendas"
+              href="/absence-requests"
               className="mt-2 inline-flex w-fit items-center gap-1 text-xs font-medium text-[#0a1f5c] hover:underline"
             >
               Lihat semua <ChevronRight className="h-3.5 w-3.5" />
@@ -429,8 +406,52 @@ function DashboardAgendaList({
         <EmptyState
           text={
             isLoading
-              ? "Memuat jadwal terdekat."
-              : "Tidak ada agenda dalam 14 hari ke depan."
+              ? "Memuat perizinan hari ini."
+              : "Belum ada izin/sakit masuk hari ini."
+          }
+        />
+      )}
+    </DashboardCard>
+  );
+}
+
+function DashboardAnnouncementList({
+  announcements,
+  isLoading,
+}: {
+  announcements: Announcement[];
+  isLoading: boolean;
+}) {
+  return (
+    <DashboardCard
+      title="Pengumuman Aktif"
+      subtitle="Informasi terbaru yang sudah dipublish"
+    >
+      {announcements.length > 0 ? (
+        <div className="grid">
+          {announcements.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-start gap-3 border-b border-slate-200/70 py-2.5 last:border-0"
+            >
+              <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600">
+                <Bell className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-slate-900">
+                  {item.title}
+                </p>
+                <p className="mt-0.5 text-xs text-[#64748b]">
+                  {item.publishedAt ? formatDate(item.publishedAt) : "Aktif"}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          text={
+            isLoading ? "Memuat pengumuman." : "Belum ada pengumuman aktif."
           }
         />
       )}
@@ -452,7 +473,7 @@ function FinancialCategoryBreakdown({
   return (
     <DashboardCard
       title="Arus Kas Bulan Ini"
-      subtitle="Perbandingan uang masuk per kategori vs rencana pengeluaran — Mei 2026"
+      subtitle="Perbandingan uang masuk per kategori vs rencana pengeluaran - Mei 2026"
     >
       {categories.length > 0 ? (
         <div className="grid gap-3">
@@ -469,7 +490,7 @@ function FinancialCategoryBreakdown({
               {formatMoney(Math.abs(netCash))}
             </p>
             <p className="text-xs text-[#64748b]">
-              {unpaidCount} tagihan belum dibayar · {formatMoney(finance?.outstanding)}
+              {unpaidCount} tagihan belum dibayar / {formatMoney(finance?.outstanding)}
             </p>
           </div>
         </div>

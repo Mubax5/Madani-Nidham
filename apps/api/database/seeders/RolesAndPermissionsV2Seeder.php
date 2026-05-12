@@ -47,8 +47,6 @@ class RolesAndPermissionsV2Seeder extends Seeder
             'view_articles',
             'manage_fees',
             'view_fees',
-            'manage_tutoring',
-            'view_tutoring',
             'view_analytics',
             'manage_ai_chat',
             'view_ai_chat_history',
@@ -79,7 +77,6 @@ class RolesAndPermissionsV2Seeder extends Seeder
             'view_registrations',
             'view_articles', 'manage_articles',
             'view_fees',
-            'view_tutoring',
             'use_ai_chat',
         ]);
 
@@ -100,7 +97,6 @@ class RolesAndPermissionsV2Seeder extends Seeder
             'manage_registrations', 'view_registrations',
             'manage_articles', 'view_articles',
             'manage_fees', 'view_fees',
-            'manage_tutoring', 'view_tutoring',
         ]);
 
         Role::findOrCreate('guru', 'web')->syncPermissions([
@@ -113,7 +109,6 @@ class RolesAndPermissionsV2Seeder extends Seeder
             'update_student_hafalan', 'view_hafalan',
             'manage_portfolios', 'view_portfolios',
             'manage_galleries', 'view_galleries',
-            'view_tutoring',
         ]);
 
         Role::findOrCreate('orang_tua', 'web')->syncPermissions([
@@ -128,7 +123,6 @@ class RolesAndPermissionsV2Seeder extends Seeder
             'view_attendance',
             'view_articles',
             'view_fees',
-            'view_tutoring',
             'use_ai_chat',
         ]);
     }

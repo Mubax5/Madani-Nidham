@@ -27,6 +27,7 @@ class RegistrationFlowTest extends TestCase
             'childBirthDate' => '2021-08-09',
             'childGender' => 'L',
             'programApplied' => 'TK A',
+            'programType' => 'regular',
             'parentName' => 'Bunda Adam',
             'parentPhone' => '000000000100',
             'parentEmail' => 'bunda.adam@example.test',

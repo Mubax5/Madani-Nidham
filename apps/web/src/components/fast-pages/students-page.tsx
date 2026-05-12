@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { StudentPhotoFrame } from "@/components/student-photo-frame";
 import { usePermissions } from "@/lib/use-permissions";
-import { ActionButton, ActionGroup, CategoryTabs, CompactTable, DrawerForm, PageHeader, Panel, SearchField, SelectField, StatusBadge, SubmitButton, TextArea, TextInput, buildQuery, classLabel, firstParent, formatDate, initials, levelOptions, levelTabs, listFrom, matchesLevel, roleLabel, roleNames, studentClass, studentLevel, todayInput, useList, type SchoolClass, type Student, type User } from "./workspace-shared";
+import { ActionButton, ActionGroup, CategoryTabs, CompactTable, DrawerForm, PageHeader, Panel, SearchField, SelectField, StatusBadge, SubmitButton, TextArea, TextInput, buildQuery, classLabel, firstParent, formatDate, initials, levelOptions, levelTabs, listFrom, matchesLevel, programOptions, roleLabel, roleNames, studentClass, studentLevel, todayInput, useList, type SchoolClass, type Student, type User } from "./workspace-shared";
 
 export function StudentsPage() {
   const queryClient = useQueryClient();
@@ -32,6 +32,7 @@ export function StudentsPage() {
     gender: "L",
     address: "",
     joinDate: todayInput(),
+    programType: "regular",
     status: "active",
     classId: "",
     parentName: "",
@@ -79,6 +80,7 @@ export function StudentsPage() {
       gender: "L",
       address: "",
       joinDate: todayInput(),
+      programType: "regular",
       status: "active",
       classId: "",
       parentName: "",
@@ -108,6 +110,7 @@ export function StudentsPage() {
       gender: student.gender ?? "L",
       address: student.address ?? "",
       joinDate: student.joinDate?.slice(0, 10) ?? todayInput(),
+      programType: student.programType ?? "regular",
       status: student.status ?? "active",
       classId: student.classes?.[0]?.id ? String(student.classes[0].id) : "",
       parentName: parent?.name ?? "",
@@ -244,6 +247,18 @@ export function StudentsPage() {
                 value={form.nis}
                 onChange={(value) => setForm({ ...form, nis: value })}
               />
+              <SelectField
+                label="Program TK"
+                value={form.programType}
+                required
+                onChange={(value) => setForm({ ...form, programType: value })}
+              >
+                {programOptions.map((program) => (
+                  <option key={program.value} value={program.value}>
+                    {program.label}
+                  </option>
+                ))}
+              </SelectField>
               <SelectField
                 label="Jenis kelamin"
                 value={form.gender}
@@ -419,6 +434,13 @@ export function StudentsPage() {
               key: "class",
               header: "Kelas",
               render: (student) => studentClass(student),
+            },
+            {
+              key: "program",
+              header: "Program",
+              render: (student) =>
+                programOptions.find((item) => item.value === student.programType)
+                  ?.label ?? "Reguler",
             },
             {
               key: "birth",

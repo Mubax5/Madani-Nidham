@@ -100,8 +100,13 @@ class DatabaseSeeder extends Seeder
     private function seedCoreData(): void
     {
         $year = AcademicYear::updateOrCreate(
+            ['name' => '2025/2026'],
+            ['start_date' => '2025-06-20', 'end_date' => '2026-06-19', 'is_active' => true],
+        );
+
+        AcademicYear::updateOrCreate(
             ['name' => '2026/2027'],
-            ['start_date' => '2026-07-01', 'end_date' => '2027-06-30', 'is_active' => true],
+            ['start_date' => '2026-06-20', 'end_date' => '2027-06-19', 'is_active' => false],
         );
 
         AcademicYear::whereKeyNot($year->id)->update(['is_active' => false]);
@@ -258,7 +263,6 @@ class DatabaseSeeder extends Seeder
             DB::table('ai_chat_usages')->whereIn('user_id', $parentUserIds)->delete();
             DB::table('notifications')->whereIn('user_id', $parentUserIds)->delete();
             DB::table('absence_requests')->whereIn('requested_by', $parentUserIds)->delete();
-            DB::table('tutoring_bookings')->whereIn('requested_by', $parentUserIds)->delete();
             DB::table('model_has_roles')->where('model_type', User::class)->whereIn('model_id', $parentUserIds)->delete();
             DB::table('model_has_permissions')->where('model_type', User::class)->whereIn('model_id', $parentUserIds)->delete();
             User::whereIn('id', $parentUserIds)->delete();
@@ -269,6 +273,11 @@ class DatabaseSeeder extends Seeder
         foreach ($studentSeeds as $index => [$fullName, $nickname, $gender, $level, $address, $status]) {
             $number = $index + 1;
             $nis = sprintf('MDN-%03d', $number);
+            $programType = match (true) {
+                $level === 'TK C' && $status === 'active' => 'full_day',
+                $number % 3 === 0 => 'half_day',
+                default => 'regular',
+            };
             $demoStudent = Student::updateOrCreate(
                 ['nis' => $nis],
                 [
@@ -284,6 +293,7 @@ class DatabaseSeeder extends Seeder
                     'gender' => $gender,
                     'address' => $address ?? 'Data alamat belum dilengkapi',
                     'join_date' => '2026-07-01',
+                    'program_type' => $programType,
                     'status' => $status,
                 ],
             );
@@ -292,7 +302,7 @@ class DatabaseSeeder extends Seeder
             $assignedClass = $classes->firstWhere('level', $level) ?? $class;
             DB::table('student_classes')->updateOrInsert(
                 ['student_id' => $demoStudent->id, 'academic_year_id' => $year->id],
-                ['class_id' => $assignedClass->id, 'status' => $status === 'alumni' ? 'graduated' : 'active', 'created_at' => now(), 'updated_at' => now()],
+                ['class_id' => $assignedClass->id, 'program_type' => $programType, 'status' => $status === 'alumni' ? 'graduated' : 'active', 'created_at' => now(), 'updated_at' => now()],
             );
         }
 
@@ -480,8 +490,9 @@ class DatabaseSeeder extends Seeder
                     'child_birth_date' => now()->subYears($level === 'KB' ? 4 : 5)->subMonths($i)->toDateString(),
                     'child_gender' => $gender,
                     'program_applied' => $level,
+                    'program_type' => $i % 3 === 0 ? 'half_day' : 'regular',
                     'parent_name' => 'Wali '.$nickname,
-                    'parent_phone' => '628133000'.str_pad((string) $i, 3, '0', STR_PAD_LEFT),
+                    'parent_phone' => '0000001'.str_pad((string) $i, 5, '0', STR_PAD_LEFT),
                     'parent_email' => sprintf('ppdb%02d@madani-nidham.local', $i),
                     'address' => $address ?? 'Data alamat belum dilengkapi',
                     'document_urls' => [],

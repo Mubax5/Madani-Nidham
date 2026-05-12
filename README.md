@@ -50,6 +50,8 @@ Default akun demo lokal dari seeder non-production:
 
 Ganti atau nonaktifkan akun demo sebelum deploy production.
 
+Login Google opsional untuk production. Isi `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, dan `GOOGLE_ALLOWED_REDIRECT_URIS`, lalu user harus login email-password dulu dan verifikasi Google dari menu profil.
+
 ## PPDB Publik
 
 Halaman PPDB ada di repo website publik lama `madani-montessori`:

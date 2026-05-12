@@ -146,6 +146,7 @@ class AiChatController extends Controller
     public function usage(Request $request, AiQuotaService $quota)
     {
         $today = $request->date('date')?->toDateString() ?? now()->toDateString();
+        $currentQuota = $quota->quotaFor($request->user());
         $users = User::query()
             ->where('is_active', true)
             ->permission('use_ai_chat')
@@ -174,8 +175,8 @@ class AiChatController extends Controller
         return ApiResponse::success([
             'date' => $today,
             'global' => [
-                'daily_requests' => 1500,
-                'tokens_per_minute' => 800000,
+                'daily_requests' => $currentQuota['global_daily_requests'],
+                'tokens_per_minute' => $currentQuota['global_tokens_per_minute'],
             ],
             'users' => $users,
             'totals' => [

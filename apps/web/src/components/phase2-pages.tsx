@@ -27,7 +27,6 @@ import {
   Download,
   Eye,
   FileText,
-  GraduationCap,
   Image as ImageIcon,
   Moon,
   Pencil,
@@ -52,7 +51,7 @@ import { MonthYearNav } from "@/components/finance/month-year-nav";
 import { StudentPhotoFrame } from "@/components/student-photo-frame";
 
 type User = { id: number; name: string; email?: string; roles?: string[] };
-type Student = { id: number; fullName: string; nickname?: string | null; nis?: string | null; gender?: string | null; photoUrl?: string | null; classes?: SchoolClass[] };
+type Student = { id: number; fullName: string; nickname?: string | null; nis?: string | null; gender?: string | null; photoUrl?: string | null; programType?: string | null; programLabel?: string | null; classes?: SchoolClass[] };
 type SchoolClass = { id: number; name: string; level: string; teacher?: User | null; studentsCount?: number };
 type MontessoriArea = { id: number; name: string };
 type HafalanSurah = {
@@ -196,27 +195,7 @@ type FinanceOverview = {
   recentEntries: FinanceEntry[];
   payrolls: TeacherPayroll[];
 };
-type TutoringSession = {
-  id: number;
-  type: string;
-  scheduledAt: string;
-  durationMinutes: number;
-  status: string;
-  sessionNotes?: string | null;
-  homeworkNotes?: string | null;
-  student?: Student | null;
-  teacher?: User | null;
-};
-type TutoringBooking = {
-  id: number;
-  type: string;
-  preferredAt: string;
-  notes?: string | null;
-  status: string;
-  student?: Student | null;
-  teacher?: User | null;
-  requester?: User | null;
-};
+
 type AiHistory = { id: number; role: "user" | "model"; message: string; tokensUsed?: number | null; createdAt?: string; user?: User | null; student?: Student | null };
 type AiUsage = {
   global: { dailyRequests: number; tokensPerMinute: number };
@@ -1681,7 +1660,13 @@ export function TeacherPayrollsPage() {
 }
 
 export function FinanceSettingsPage() {
-  const [tab, setTab] = useState<"fees" | "accounts">("fees");
+  const [tab, setTab] = useState<"fees" | "accounts" | "rules">("fees");
+  const rules = [
+    ["Kode unik transfer", "Aktif untuk invoice SPP agar nominal mudah dicocokkan."],
+    ["Audit sumber transaksi", "SPP, uang pendaftaran, kas manual, dan gaji guru wajib punya sumber."],
+    ["Konfirmasi pembayaran", "Pembayaran baru masuk Pusat Keuangan setelah dikonfirmasi admin."],
+    ["Kas manual", "Pengeluaran/pemasukan manual wajib kategori, nominal, tanggal, dan judul."],
+  ];
   return (
     <div className="grid gap-4">
       <Breadcrumbs items={[{ label: "Keuangan", href: "/fees" }, { label: "Pengaturan Keuangan" }]} />
@@ -1689,9 +1674,24 @@ export function FinanceSettingsPage() {
         <div className="flex flex-wrap gap-2">
           <Button tone={tab === "fees" ? "primary" : "plain"} onClick={() => setTab("fees")}>Jenis Tagihan</Button>
           <Button tone={tab === "accounts" ? "primary" : "plain"} onClick={() => setTab("accounts")}>Rekening Sekolah</Button>
+          <Button tone={tab === "rules" ? "primary" : "plain"} onClick={() => setTab("rules")}>Aturan Sistem</Button>
         </div>
       </PageHeader>
-      {tab === "fees" ? <FeeTypesPage embedded /> : <BankAccountsPage embedded />}
+      {tab === "fees" ? <FeeTypesPage embedded /> : null}
+      {tab === "accounts" ? <BankAccountsPage embedded /> : null}
+      {tab === "rules" ? (
+        <Panel title="Aturan sistem keuangan">
+          <p className="mb-3 text-sm text-[#64748b]">Ringkasan kontrol produksi supaya data pusat keuangan tetap konsisten.</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            {rules.map(([title, description]) => (
+              <div key={title} className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="font-bold text-[#0a1f5c]">{title}</p>
+                <p className="mt-1 text-xs leading-5 text-[#64748b]">{description}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
     </div>
   );
 }
@@ -1844,34 +1844,6 @@ function LegacyBankAccountsPage() {
   const save = useMutation({ mutationFn: () => apiFetch("/school-accounts", { method: "POST", body: { ...form, isActive: true } }), onSuccess: () => { toast.success("Rekening tersimpan"); setForm({ bankName: "", accountNumber: "", accountHolder: "" }); queryClient.invalidateQueries({ queryKey: ["school-accounts"] }); }, onError: (error) => toast.error(error.message) });
   return <div className="grid gap-4"><PageHeader title="Rekening Sekolah" description="Kelola rekening tujuan transfer SPP." icon={<Banknote className="h-5 w-5" />} /><Panel title="Tambah rekening"><form className="grid gap-3 md:grid-cols-3" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}><Input label="Bank" value={form.bankName} onChange={(value) => setForm({ ...form, bankName: value })} required /><Input label="No rekening" value={form.accountNumber} onChange={(value) => setForm({ ...form, accountNumber: value })} required /><Input label="Pemilik" value={form.accountHolder} onChange={(value) => setForm({ ...form, accountHolder: value })} required /><div className="md:col-span-3"><Button type="submit" disabled={save.isPending}><Plus className="h-4 w-4" />Tambah</Button></div></form></Panel><Panel title="Daftar rekening">{items.map((item) => <div key={item.id} className="flex items-center justify-between border-b border-slate-100 py-3 last:border-b-0"><div><p className="font-bold text-[#0a1f5c]">{item.bankName} {item.accountNumber}</p><p className="text-sm text-[#64748b]">a/n {item.accountHolder}</p></div><Badge value={item.isActive ? "paid" : "cancelled"} /></div>)}</Panel></div>;
 }
-
-export function TutoringPage({ initialNewOpen = false }: { initialNewOpen?: boolean } = {}) {
-  const { can } = usePermissions();
-  const [formOpen, setFormOpen] = useState(initialNewOpen);
-  const sessions = listFrom(useList<TutoringSession>(["tutoring-sessions"], "/tutoring/sessions").data);
-  return <div className="grid gap-4">{initialNewOpen ? <Breadcrumbs items={[{ label: "Bimbel", href: "/tutoring" }, { label: "Sesi baru" }]} /> : null}<PageHeader title="Jadwal Bimbel" description="Kalender internal sesi calistung, pendampingan, dan bahasa." icon={<GraduationCap className="h-5 w-5" />}><div className="flex gap-2">{can("manage_tutoring") ? <Button onClick={() => setFormOpen(true)}><Plus className="h-4 w-4" />Sesi baru</Button> : null}{can("manage_tutoring") ? <Link className="madani-button border border-slate-200 bg-white text-[#0a1f5c]" href="/tutoring/bookings">Booking</Link> : null}</div></PageHeader><Panel title="Sesi mendatang"><div className="grid gap-3">{sessions.map((item) => <article key={item.id} className="rounded-2xl border border-slate-200 p-4"><div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><h2 className="font-bold text-[#0a1f5c]">{item.student?.fullName ?? "-"} / {label(item.type)}</h2><p className="text-sm text-[#64748b]">{formatDate(item.scheduledAt)} / {item.teacher?.name ?? "-"}</p></div><Badge value={item.status} /></div></article>)}{sessions.length === 0 ? <Empty text="Belum ada sesi bimbel." /> : null}</div></Panel><Modal open={formOpen} title="Sesi bimbel baru" description="Buat jadwal tanpa keluar dari kalender." onClose={() => setFormOpen(false)}><TutoringSessionEditor onSaved={() => setFormOpen(false)} /></Modal></div>;
-}
-
-function TutoringSessionEditor({ onSaved }: { onSaved?: () => void } = {}) {
-  const router = useRouter();
-  const students = listFrom(useList<Student>(["students", "tutoring-form"], "/students?perPage=100").data);
-  const teachers = listFrom(useList<User>(["users", "tutoring-form"], "/users?perPage=100").data).filter((user) => (user.roles ?? []).some((role) => String(role).includes("guru")));
-  const [form, setForm] = useState({ studentId: "", teacherId: "", type: "calistung", scheduledAt: "", durationMinutes: "60" });
-  const save = useMutation({ mutationFn: () => apiFetch("/tutoring/sessions", { method: "POST", body: { studentId: Number(form.studentId), teacherId: Number(form.teacherId), type: form.type, scheduledAt: form.scheduledAt, durationMinutes: Number(form.durationMinutes) } }), onSuccess: () => { toast.success("Sesi bimbel dibuat"); if (onSaved) onSaved(); else router.push("/tutoring"); }, onError: (error) => toast.error(error.message) });
-  return <Panel title="Form sesi"><form className="grid gap-3 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}><Select label="Murid" value={form.studentId} onChange={(value) => setForm({ ...form, studentId: value })} required><StudentOptions students={students} /></Select><Select label="Guru" value={form.teacherId} onChange={(value) => setForm({ ...form, teacherId: value })} required><option value="">Pilih guru</option>{teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}</Select><Select label="Tipe" value={form.type} onChange={(value) => setForm({ ...form, type: value })}><option value="calistung">Calistung</option><option value="pendampingan_belajar">Pendampingan Belajar</option><option value="bahasa">Bahasa</option></Select><Input label="Jadwal" type="datetime-local" value={form.scheduledAt} onChange={(value) => setForm({ ...form, scheduledAt: value })} required /><Input label="Durasi menit" type="number" value={form.durationMinutes} onChange={(value) => setForm({ ...form, durationMinutes: value })} required /><div className="md:col-span-2"><Button type="submit" disabled={save.isPending}><Save className="h-4 w-4" />Simpan</Button></div></form></Panel>;
-}
-
-export function TutoringSessionNewPage() {
-  return <TutoringPage initialNewOpen />;
-}
-
-export function TutoringBookingsPage() {
-  const queryClient = useQueryClient();
-  const bookings = listFrom(useList<TutoringBooking>(["tutoring-bookings"], "/tutoring/bookings").data);
-  const confirm = useMutation({ mutationFn: (id: number) => apiFetch(`/tutoring/bookings/${id}/confirm`, { method: "PUT", body: {} }), onSuccess: () => { toast.success("Booking dikonfirmasi"); queryClient.invalidateQueries({ queryKey: ["tutoring-bookings"] }); }, onError: (error) => toast.error(error.message) });
-  return <div className="grid gap-4"><Breadcrumbs items={[{ label: "Bimbel", href: "/tutoring" }, { label: "Booking" }]} /><PageHeader title="Booking Bimbel" description="Kelola permintaan booking bimbel dari orang tua." icon={<GraduationCap className="h-5 w-5" />} /><Panel title="Daftar booking"><div className="grid gap-3">{bookings.map((item) => <article key={item.id} className="rounded-2xl border border-slate-200 p-4"><div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><h2 className="font-bold text-[#0a1f5c]">{item.student?.fullName ?? "-"} / {label(item.type)}</h2><p className="text-sm text-[#64748b]">{formatDate(item.preferredAt)} / {item.requester?.name ?? "-"}</p><p className="text-sm text-[#334155]">{item.notes}</p></div><div className="flex flex-wrap gap-2"><Badge value={item.status} /><Button disabled={item.status !== "pending"} onClick={() => confirm.mutate(item.id)}>Konfirmasi</Button></div></div></article>)}{bookings.length === 0 ? <Empty text="Belum ada booking." /> : null}</div></Panel></div>;
-}
-
 export function AiChatHistoryPage() {
   const { can } = usePermissions();
   const queryClient = useQueryClient();
@@ -1892,6 +1864,9 @@ export function AiChatHistoryPage() {
     return map;
   }, new Map<string, { key: string; user?: User | null; student?: Student | null; latestAt: string; latestMessage: string; count: number; tokens: number }>()).values()).sort((a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime());
   const usage = useItem<AiUsage>(["ai-usage"], "/ai/chat/usage").data?.data;
+  const globalRequests = usage?.global.dailyRequests ?? 1500;
+  const globalTokensPerMinute = usage?.global.tokensPerMinute ?? 800000;
+  const parentDailyLimit = usage?.users.find((row) => row.quota.parentDailyRequestLimit)?.quota.parentDailyRequestLimit;
   const remove = useMutation({ mutationFn: (id: number) => apiFetch(`/ai/chat/histories/${id}`, { method: "DELETE" }), onSuccess: () => { toast.success("Riwayat AI dihapus"); queryClient.invalidateQueries({ queryKey: ["ai-histories"] }); }, onError: (error) => toast.error(error.message) });
 
   function exportCsv() {
@@ -1956,18 +1931,18 @@ export function AiChatHistoryPage() {
       </Panel>
       <Panel title="Batas pemakaian">
         <p className="mb-3 text-sm leading-6 text-[#64748b]">
-              Kuota AI terbatas: total 1.500 request/hari dan 800.000 token/menit. Super admin 1.000 request, kepala sekolah 120 request, admin 40 request. Sisa request otomatis dibagi rata ke akun orang tua aktif.
+          Kuota AI dibagi berbobot dari total {globalRequests.toLocaleString("id-ID")} request/hari dan {globalTokensPerMinute.toLocaleString("id-ID")} token/menit. Orang tua 1x{parentDailyLimit ? ` (${parentDailyLimit} request/hari)` : ""}; super admin, admin, dan kepala sekolah 2x dari kuota orang tua.
         </p>
         <div className="mb-3 grid gap-3 md:grid-cols-4">
           <div><p className="text-xs text-[#64748b]">Request hari ini</p><p className="font-display text-2xl font-extrabold text-[#0a1f5c]">{usage?.totals.requests ?? 0}</p></div>
           <div><p className="text-xs text-[#64748b]">Token hari ini</p><p className="font-display text-2xl font-extrabold text-[#0a1f5c]">{(usage?.totals.tokens ?? 0).toLocaleString("id-ID")}</p></div>
           <div><p className="text-xs text-[#64748b]">Akun aktif</p><p className="font-display text-2xl font-extrabold text-[#0a1f5c]">{usage?.totals.activeAiUsers ?? 0}</p></div>
-          <div><p className="text-xs text-[#64748b]">Kuota global</p><p className="font-display text-2xl font-extrabold text-[#0a1f5c]">{usage?.global.dailyRequests ?? 1500}</p></div>
+          <div><p className="text-xs text-[#64748b]">Kuota global</p><p className="font-display text-2xl font-extrabold text-[#0a1f5c]">{globalRequests}</p></div>
         </div>
         <div className="grid gap-2">
           {(usage?.users ?? []).map((row) => (
             <div key={row.user.id} className="grid gap-2 rounded-xl border border-slate-200 p-3 md:grid-cols-[1fr_auto_auto_auto] md:items-center">
-              <div><p className="font-semibold text-[#0a1f5c]">{row.user.name}</p><p className="text-xs text-[#64748b]">Kuota akun {row.quota.dailyRequestLimit} request/hari</p></div>
+              <div><p className="font-semibold text-[#0a1f5c]">{row.user.name}</p><p className="text-xs text-[#64748b]">Kuota akun {row.quota.dailyRequestLimit} request/hari / bobot {row.quota.weight}x</p></div>
               <span className="text-sm text-[#64748b]">{row.requestsToday}/{row.quota.dailyRequestLimit} request</span>
               <span className="text-sm text-[#64748b]">{row.remainingRequests} sisa</span>
               <span className="text-sm text-[#64748b]">{row.quota.tokensPerMinuteLimit.toLocaleString("id-ID")} token/menit</span>
