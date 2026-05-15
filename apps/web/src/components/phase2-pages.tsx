@@ -119,7 +119,7 @@ type Article = {
   publishedAt?: string | null;
 };
 type BankAccount = { id: number; bankName: string; accountNumber: string; accountHolder: string; isActive: boolean };
-type FeeType = { id: number; name: string; amount: number; dueDay: number; applicableLevels?: string[]; isRecurring: boolean; isActive: boolean };
+type FeeType = { id: number; name: string; amount: number; dueDay: number; applicableLevels?: string[]; applicablePrograms?: string[]; isRecurring: boolean; isActive: boolean };
 type FeePayment = {
   id: number;
   receivedAmount: number;
@@ -226,6 +226,22 @@ const statusColors: Record<string, string> = {
   belum: "bg-slate-50 text-slate-600 border-slate-200",
 };
 const pieColors = ["#0a1f5c", "#f5c542", "#10b981", "#ef4444", "#8b5cf6"];
+const feeProgramScopes = [
+  { value: "all", label: "Semua program", programs: [] as string[], levels },
+  { value: "regular", label: "Reguler", programs: ["regular"], levels },
+  { value: "half_day", label: "Half-day", programs: ["half_day"], levels },
+  { value: "full_day", label: "Full-day", programs: ["full_day"], levels: ["TK B", "TK C"] },
+];
+
+function feeScopeFromItem(item?: FeeType | null) {
+  const programs = item?.applicablePrograms ?? [];
+  if (programs.length === 1) return programs[0];
+  return "all";
+}
+
+function feeScope(value: string) {
+  return feeProgramScopes.find((item) => item.value === value) ?? feeProgramScopes[0];
+}
 
 function listFrom<T>(response?: ApiResponse<T[]>): T[] {
   return Array.isArray(response?.data) ? response.data : (emptyList as T[]);
@@ -432,6 +448,68 @@ function studentClass(student?: Student | null) {
   return student?.classes?.[0]?.name ?? "Belum ada kelas";
 }
 
+function normalizeLevel(value?: string | null) {
+  const labels: Record<string, string> = {
+    KB: "KB",
+    TKA: "TK A",
+    "TK A": "TK A",
+    TKB: "TK B",
+    "TK B": "TK B",
+    TKC: "TK C",
+    "TK C": "TK C",
+  };
+  return labels[value ?? ""] ?? value ?? "-";
+}
+
+function studentLevel(student?: Student | null) {
+  return normalizeLevel(student?.classes?.[0]?.level);
+}
+
+function matchesLevel(value?: string | null, filter?: string) {
+  if (!filter) return true;
+  return normalizeLevel(value) === filter;
+}
+
+function levelTabs(source: Student[]) {
+  return [
+    { value: "", label: "Semua", count: source.length },
+    ...levels.map((level) => ({
+      value: level,
+      label: level,
+      count: source.filter((student) => matchesLevel(studentLevel(student), level)).length,
+    })),
+  ];
+}
+
+function LevelTabs({ items, value, onChange }: { items: Array<{ value: string; label: string; count?: number }>; value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item) => {
+        const active = item.value === value;
+        return (
+          <button
+            key={item.value || item.label}
+            type="button"
+            onClick={() => onChange(item.value)}
+            className={`shrink-0 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+              active
+                ? "border-[#0a1f5c] bg-[#0a1f5c] text-white"
+                : "border-slate-200 bg-white text-[#334155] hover:border-[#0a1f5c]/30"
+            }`}
+          >
+            {item.label}
+            {typeof item.count === "number" ? (
+              <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] ${active ? "bg-white/16 text-white" : "bg-slate-100 text-[#64748b]"}`}>
+                {item.count}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function initials(value?: string | null) {
   return (value ?? "")
     .split(" ")
@@ -502,8 +580,10 @@ export function AbsenceRequestsPage() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState("");
   const [date, setDate] = useState("");
+  const [search, setSearch] = useState("");
   const [notes, setNotes] = useState<Record<number, string>>({});
   const requests = listFrom(useList<AbsenceRequest>(["absence-requests", status, date], buildQuery("/absence-requests", { status, date, perPage: 100 })).data);
+  const filteredRequests = requests.filter((item) => [item.student?.fullName ?? "", studentClass(item.student), item.type, label(item.status), item.reason, formatDate(item.date)].join(" ").toLowerCase().includes(search.toLowerCase()));
   const review = useMutation({
     mutationFn: ({ id, nextStatus }: { id: number; nextStatus: "approved" | "rejected" }) =>
       apiFetch(`/absence-requests/${id}/review`, { method: "PUT", body: { status: nextStatus, notes: notes[id] ?? "" } }),
@@ -513,24 +593,41 @@ export function AbsenceRequestsPage() {
     },
     onError: (error) => toast.error(error.message),
   });
+  const remove = useMutation({
+    mutationFn: (id: number) => apiFetch(`/absence-requests/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast.success("Permohonan izin dihapus");
+      queryClient.invalidateQueries({ queryKey: ["absence-requests"] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   return (
     <div className="grid gap-4">
       <PageHeader title="Permohonan Izin" description="Approve atau reject izin sakit/izin dari orang tua." icon={<CalendarCheck className="h-5 w-5" />}>
-        <div className="grid gap-2 sm:grid-cols-[160px_170px]">
+        <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid gap-1">
+            <p className="text-xs font-bold uppercase text-[#64748b]">Hari ini, {formatDate(todayInput())}</p>
+            <SearchBox value={search} onChange={setSearch} placeholder="Cari murid, alasan, status" />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[160px_170px]">
           <Select label="Status" value={status} onChange={setStatus}><option value="">Semua</option><option value="pending">Pending</option><option value="approved">Disetujui</option><option value="rejected">Ditolak</option></Select>
           <Input label="Tanggal" type="date" max={todayInput()} value={date} onChange={setDate} />
+          </div>
         </div>
       </PageHeader>
       <div className="grid gap-3 xl:grid-cols-2">
-        {requests.map((item) => (
+        {filteredRequests.map((item) => (
           <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-display text-xl font-extrabold text-[#0a1f5c]">{item.student?.fullName ?? "Murid"}</h2>
-                <p className="text-sm text-[#64748b]">{formatDate(item.date)} / {label(item.type)}</p>
+                <p className="text-sm text-[#64748b]">{studentClass(item.student)} / {label(item.type)}</p>
               </div>
-              <Badge value={item.status} />
+              <div className="text-right">
+                <p className="mb-1 text-xs font-semibold text-[#64748b]">{formatDate(item.date)}</p>
+                <Badge value={item.status} />
+              </div>
             </div>
             <p className="mt-3 text-sm leading-6 text-[#334155]">{item.reason}</p>
             {item.documentUrl ? <a className="mt-2 inline-flex text-xs font-bold text-[#0a1f5c]" href={item.documentUrl} target="_blank" rel="noreferrer">Lihat dokumen</a> : null}
@@ -538,10 +635,11 @@ export function AbsenceRequestsPage() {
             <div className="mt-3 flex flex-wrap gap-2">
               <Button disabled={review.isPending || item.status !== "pending"} onClick={() => review.mutate({ id: item.id, nextStatus: "approved" })}><Check className="h-4 w-4" />Approve</Button>
               <Button tone="danger" disabled={review.isPending || item.status !== "pending"} onClick={() => review.mutate({ id: item.id, nextStatus: "rejected" })}><X className="h-4 w-4" />Reject</Button>
+              <Button tone="plain" disabled={remove.isPending} onClick={() => { if (window.confirm("Hapus permohonan izin ini?")) remove.mutate(item.id); }}><Trash2 className="h-4 w-4" />Hapus</Button>
             </div>
           </article>
         ))}
-        {requests.length === 0 ? <Empty text="Belum ada permohonan izin sesuai filter." /> : null}
+        {filteredRequests.length === 0 ? <Empty text="Belum ada permohonan izin sesuai filter." /> : null}
       </div>
     </div>
   );
@@ -551,37 +649,41 @@ export function HafalanPage() {
   const students = listFrom(useList<Student>(["students", "hafalan"], "/students?perPage=100").data);
   const surahs = listFrom(useList<HafalanSurah>(["hafalan-surahs"], "/hafalan/surahs").data);
   const [search, setSearch] = useState("");
+  const [levelFilter, setLevelFilter] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const selectedStudent = students.find((student) => student.id === selectedId) ?? students[0];
+  const filteredStudents = students.filter((student) => {
+    const matchSearch = [student.fullName, student.nickname ?? "", student.nis ?? "", studentClass(student)].join(" ").toLowerCase().includes(search.toLowerCase());
+    return matchSearch && matchesLevel(studentLevel(student), levelFilter);
+  });
+  const selectedStudent = students.find((student) => student.id === selectedId) ?? filteredStudents[0];
   const detail = useItem<{ student: Student; surahs: HafalanSurah[] }>(["hafalan-preview", selectedStudent?.id], `/hafalan/student/${selectedStudent?.id}`, Boolean(selectedStudent?.id)).data?.data;
   const doaDetail = useItem<{ student: Student; doas: DoaItem[] }>(["doa-preview", selectedStudent?.id], `/doa/student/${selectedStudent?.id}`, Boolean(selectedStudent?.id)).data?.data;
-  const filteredStudents = students.filter((student) => [student.fullName, student.nickname ?? "", student.nis ?? "", studentClass(student)].join(" ").toLowerCase().includes(search.toLowerCase()));
   const masteredSurahs = (detail?.surahs ?? []).filter((item) => item.studentStatus === "mutqin" || item.studentStatus === "lancar");
   const masteredDoas = (doaDetail?.doas ?? []).filter((item) => item.studentStatus === "hafal");
+  useEffect(() => {
+    if (filteredStudents.length > 0 && !filteredStudents.some((student) => student.id === selectedId)) {
+      setSelectedId(filteredStudents[0].id);
+    }
+  }, [filteredStudents, selectedId]);
 
   return (
     <div className="grid gap-4">
       <PageHeader title="Hafalan & Doa" description="Ringkasan internal progress hafalan per murid." icon={<Moon className="h-5 w-5" />}>
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="grid gap-1">
-            <p className="text-xs font-bold uppercase text-[#64748b]">Hari ini, {formatDate(todayInput())}</p>
-            <SearchBox value={search} onChange={setSearch} placeholder="Cari murid, NIS, kelas" />
-          </div>
-          <Link href="/hafalan/archive" className="madani-button justify-center border border-slate-200 bg-white text-[#0a1f5c]">Semua data</Link>
-        </div>
+        <SearchBox value={search} onChange={setSearch} placeholder="Cari murid, NIS, kelas" />
       </PageHeader>
+      <LevelTabs value={levelFilter} onChange={setLevelFilter} items={levelTabs(students)} />
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
         <Panel title="Daftar murid">
-          <div className="grid max-h-[calc(100dvh-250px)] min-h-[360px] gap-2 overflow-y-auto pr-1">
+          <div className="grid max-h-[calc(100dvh-250px)] min-h-[360px] auto-rows-[72px] content-start gap-2 overflow-y-auto pr-1">
             {filteredStudents.map((student) => {
               const active = student.id === selectedStudent?.id;
               return (
-                <button key={student.id} type="button" onClick={() => setSelectedId(student.id)} className={`rounded-xl border p-3 text-left transition ${active ? "border-[#0a1f5c] bg-[#0a1f5c] text-white" : "border-slate-200 bg-white text-[#0a1f5c] hover:border-[#0a1f5c]/30"}`}>
-                  <div className="grid grid-cols-[48px_1fr_auto] items-center gap-3">
+                <button key={student.id} type="button" onClick={() => setSelectedId(student.id)} className={`h-[72px] rounded-xl border px-3 text-left transition ${active ? "border-[#0a1f5c] bg-[#0a1f5c] text-white" : "border-slate-200 bg-white text-[#0a1f5c] hover:border-[#0a1f5c]/30"}`}>
+                  <div className="grid h-full grid-cols-[48px_1fr_auto] items-center gap-2.5">
                     <StudentPhotoFrame student={student} size="sm" active={active} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold">{student.fullName}</p>
-                      <p className={`mt-0.5 text-xs ${active ? "text-white/72" : "text-[#64748b]"}`}>{student.nis ?? "NIS belum diisi"} / {studentClass(student)}</p>
+                      <p className={`mt-0.5 truncate text-xs ${active ? "text-white/72" : "text-[#64748b]"}`}>{student.nis ?? "NIS belum diisi"} / {studentClass(student)}</p>
                     </div>
                     <span className={`text-xs font-semibold ${active ? "text-white" : "text-[#64748b]"}`}>{surahs.length} target</span>
                   </div>
@@ -767,16 +869,14 @@ function PortfolioEditor({ portfolioId, onSaved }: { portfolioId?: number; onSav
   const router = useRouter();
   const queryClient = useQueryClient();
   const students = listFrom(useList<Student>(["students", "portfolio-form"], "/students?perPage=100").data);
-  const classes = listFrom(useList<SchoolClass>(["classes", "portfolio-form"], "/classes?perPage=100").data);
   const areas = listFrom(useList<MontessoriArea>(["areas", "portfolio-form"], "/montessori/areas").data);
   const existing = useItem<Portfolio>(["portfolio", portfolioId], `/portfolios/${portfolioId}`, Boolean(portfolioId)).data?.data;
-  const [form, setForm] = useState({ studentId: "", classId: "", areaId: "", title: "", description: "", workDate: todayInput(), photoUrls: "" });
+  const [form, setForm] = useState({ studentId: "", areaId: "", title: "", description: "", workDate: todayInput(), photoUrls: "" });
   const [files, setFiles] = useState<File[]>([]);
   useEffect(() => {
     if (existing && !form.title) {
       setForm({
         studentId: String(existing.student?.id ?? ""),
-        classId: String(existing.class?.id ?? ""),
         areaId: String(existing.area?.id ?? ""),
         title: existing.title,
         description: existing.description ?? "",
@@ -790,7 +890,6 @@ function PortfolioEditor({ portfolioId, onSaved }: { portfolioId?: number; onSav
       const body = new FormData();
       if (portfolioId) body.append("_method", "PUT");
       appendFormValue(body, "studentId", Number(form.studentId));
-      appendFormValue(body, "classId", Number(form.classId));
       appendFormValue(body, "areaId", form.areaId ? Number(form.areaId) : undefined);
       appendFormValue(body, "title", form.title);
       appendFormValue(body, "description", form.description);
@@ -812,7 +911,6 @@ function PortfolioEditor({ portfolioId, onSaved }: { portfolioId?: number; onSav
     <Panel title={portfolioId ? "Edit portofolio" : "Upload karya anak"}>
       <form className="grid gap-3 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
         <Select label="Murid" value={form.studentId} onChange={(value) => setForm({ ...form, studentId: value })} required><StudentOptions students={students} /></Select>
-        <Select label="Kelas" value={form.classId} onChange={(value) => setForm({ ...form, classId: value })} required><ClassOptions classes={classes} /></Select>
         <Select label="Area Montessori" value={form.areaId} onChange={(value) => setForm({ ...form, areaId: value })}><option value="">Tanpa area</option>{areas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</Select>
         <Input label="Tanggal karya" type="date" max={todayInput()} value={form.workDate} onChange={(value) => setForm({ ...form, workDate: value })} required />
         <div className="md:col-span-2"><Input label="Judul" value={form.title} onChange={(value) => setForm({ ...form, title: value })} required /></div>
@@ -826,24 +924,78 @@ function PortfolioEditor({ portfolioId, onSaved }: { portfolioId?: number; onSav
 }
 
 export function PortfoliosPage({ initialNewOpen = false }: { initialNewOpen?: boolean } = {}) {
-  const { can } = usePermissions();
   const [search, setSearch] = useState("");
+  const [levelFilter, setLevelFilter] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(initialNewOpen);
+  const students = listFrom(useList<Student>(["students", "portfolio-options"], "/students?perPage=100").data);
   const portfolios = listFrom(useList<Portfolio>(["portfolios"], "/portfolios?perPage=100").data);
-  const filtered = portfolios.filter((item) => [item.title, item.student?.fullName, item.area?.name].join(" ").toLowerCase().includes(search.toLowerCase()));
+  const filteredStudents = students.filter((student) => {
+    const matchSearch = [student.fullName, student.nickname ?? "", student.nis ?? "", studentClass(student)].join(" ").toLowerCase().includes(search.toLowerCase());
+    return matchSearch && matchesLevel(studentLevel(student), levelFilter);
+  });
+  const selectedStudent = students.find((student) => student.id === selectedStudentId) ?? filteredStudents[0];
+  const selectedPortfolios = selectedStudent ? portfolios.filter((item) => item.student?.id === selectedStudent.id) : [];
+  useEffect(() => {
+    if (filteredStudents.length > 0 && !filteredStudents.some((student) => student.id === selectedStudentId)) {
+      setSelectedStudentId(filteredStudents[0].id);
+    }
+  }, [filteredStudents, selectedStudentId]);
   return (
     <div className="grid gap-4">
       {initialNewOpen ? <Breadcrumbs items={[{ label: "Portofolio", href: "/portfolios" }, { label: "Upload" }]} /> : null}
       <PageHeader title="Portofolio" description="Dokumentasi karya anak per murid dan area Montessori." icon={<ImageIcon className="h-5 w-5" />}>
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <SearchBox value={search} onChange={setSearch} placeholder="Cari karya, murid, area" />
-          {can("manage_portfolios") ? <Button onClick={() => setFormOpen(true)}><Plus className="h-4 w-4" />Upload</Button> : null}
-        </div>
+        <SearchBox value={search} onChange={setSearch} placeholder="Cari murid, NIS, kelas" />
       </PageHeader>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((item) => <Link key={item.id} href={`/portfolios/${item.id}`} className="rounded-2xl border border-slate-200 bg-white p-3"><PhotoStrip urls={item.photoUrls} /><h2 className="mt-3 font-bold text-[#0a1f5c]">{item.title}</h2><p className="text-sm text-[#64748b]">{item.student?.fullName ?? "-"} / {formatDate(item.workDate)}</p></Link>)}
-        {filtered.length === 0 ? <Empty text="Belum ada portofolio." /> : null}
-      </div>
+      <LevelTabs value={levelFilter} onChange={setLevelFilter} items={levelTabs(students)} />
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(380px,0.9fr)]">
+        <Panel title="Daftar murid">
+          <div className="grid max-h-[calc(100dvh-260px)] min-h-[360px] auto-rows-[72px] content-start gap-2 overflow-y-auto pr-1">
+            {filteredStudents.map((student) => {
+              const count = portfolios.filter((item) => item.student?.id === student.id).length;
+              const active = selectedStudent?.id === student.id;
+              return (
+                <button key={student.id} type="button" onClick={() => setSelectedStudentId(student.id)} className={`h-[72px] rounded-xl border px-3 text-left transition ${active ? "border-[#0a1f5c] bg-[#0a1f5c] text-white" : "border-slate-200 bg-white text-[#0a1f5c] hover:border-[#0a1f5c]/30"}`}>
+                  <div className="grid h-full grid-cols-[48px_1fr_auto] items-center gap-2.5">
+                    <StudentPhotoFrame student={student} size="sm" active={active} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold">{student.fullName}</p>
+                      <p className={`mt-0.5 truncate text-xs ${active ? "text-white/72" : "text-[#64748b]"}`}>{student.nis ?? "NIS belum diisi"} / {studentClass(student)}</p>
+                    </div>
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${active ? "bg-white/15 text-white" : "bg-slate-100 text-slate-600"}`}>{count} karya</span>
+                  </div>
+                </button>
+              );
+            })}
+            {filteredStudents.length === 0 ? <Empty text="Belum ada murid sesuai pencarian." /> : null}
+          </div>
+        </Panel>
+        <Panel title="Portofolio murid">
+          {selectedStudent ? (
+            <div className="grid gap-3">
+              <div className="grid grid-cols-[72px_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <StudentPhotoFrame student={selectedStudent} size="lg" />
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-[#0a1f5c]">{selectedStudent.fullName}</p>
+                  <p className="text-xs text-[#64748b]">{selectedStudent.nis ?? "NIS belum diisi"} / {studentClass(selectedStudent)}</p>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {selectedPortfolios.map((item) => (
+                  <Link key={item.id} href={`/portfolios/${item.id}`} className="rounded-xl border border-slate-200 bg-white p-3 transition hover:border-[#0a1f5c]/30">
+                    <PhotoStrip urls={item.photoUrls} />
+                    <h2 className="mt-3 line-clamp-1 font-bold text-[#0a1f5c]">{item.title}</h2>
+                    <p className="text-xs text-[#64748b]">{item.area?.name ?? "Area belum diisi"} / {formatDate(item.workDate)}</p>
+                  </Link>
+                ))}
+                {selectedPortfolios.length === 0 ? <Empty text="Belum ada portofolio untuk murid ini." /> : null}
+              </div>
+            </div>
+          ) : (
+            <Empty text="Pilih murid untuk melihat portofolio." />
+          )}
+        </Panel>
+      </section>
       <Modal open={formOpen} title="Upload portofolio" description="Tambah karya anak tanpa meninggalkan daftar." onClose={() => setFormOpen(false)}><PortfolioEditor onSaved={() => setFormOpen(false)} /></Modal>
     </div>
   );
@@ -1660,7 +1812,6 @@ export function TeacherPayrollsPage() {
 }
 
 export function FinanceSettingsPage() {
-  const [tab, setTab] = useState<"fees" | "accounts" | "rules">("fees");
   const rules = [
     ["Kode unik transfer", "Aktif untuk invoice SPP agar nominal mudah dicocokkan."],
     ["Audit sumber transaksi", "SPP, uang pendaftaran, kas manual, dan gaji guru wajib punya sumber."],
@@ -1671,27 +1822,21 @@ export function FinanceSettingsPage() {
     <div className="grid gap-4">
       <Breadcrumbs items={[{ label: "Keuangan", href: "/fees" }, { label: "Pengaturan Keuangan" }]} />
       <PageHeader title="Pengaturan Keuangan" description="Pengaturan general tagihan, rekening, dan aturan finance." icon={<Wallet className="h-5 w-5" />}>
-        <div className="flex flex-wrap gap-2">
-          <Button tone={tab === "fees" ? "primary" : "plain"} onClick={() => setTab("fees")}>Jenis Tagihan</Button>
-          <Button tone={tab === "accounts" ? "primary" : "plain"} onClick={() => setTab("accounts")}>Rekening Sekolah</Button>
-          <Button tone={tab === "rules" ? "primary" : "plain"} onClick={() => setTab("rules")}>Aturan Sistem</Button>
-        </div>
+        <p className="text-xs font-semibold text-[#64748b]">SPP mengikuti program murid dan kelas aktif dari data siswa.</p>
       </PageHeader>
-      {tab === "fees" ? <FeeTypesPage embedded /> : null}
-      {tab === "accounts" ? <BankAccountsPage embedded /> : null}
-      {tab === "rules" ? (
-        <Panel title="Aturan sistem keuangan">
-          <p className="mb-3 text-sm text-[#64748b]">Ringkasan kontrol produksi supaya data pusat keuangan tetap konsisten.</p>
-          <div className="grid gap-3 md:grid-cols-2">
-            {rules.map(([title, description]) => (
-              <div key={title} className="rounded-lg border border-slate-200 bg-white p-3">
-                <p className="font-bold text-[#0a1f5c]">{title}</p>
-                <p className="mt-1 text-xs leading-5 text-[#64748b]">{description}</p>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      ) : null}
+      <FeeTypesPage embedded />
+      <BankAccountsPage embedded />
+      <Panel title="Aturan sistem keuangan">
+        <p className="mb-3 text-sm text-[#64748b]">Ringkasan kontrol produksi supaya data pusat keuangan tetap konsisten.</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          {rules.map(([title, description]) => (
+            <div key={title} className="rounded-lg border border-slate-200 bg-white p-3">
+              <p className="font-bold text-[#0a1f5c]">{title}</p>
+              <p className="mt-1 text-xs leading-5 text-[#64748b]">{description}</p>
+            </div>
+          ))}
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -1736,41 +1881,76 @@ export function FeeTypesPage({ embedded = false }: { embedded?: boolean } = {}) 
   const items = listFrom(useList<FeeType>(["fee-types"], "/fee-types").data);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<FeeType | null>(null);
-  const [form, setForm] = useState({ name: "", amount: "", dueDay: "10", applicableLevels: levels.join("\n"), isRecurring: true, isActive: true });
+  const [form, setForm] = useState({ name: "", amount: "", dueDay: "10", programScope: "all", isRecurring: true, isActive: true });
   function openCreate() {
     setEditing(null);
-    setForm({ name: "", amount: "", dueDay: "10", applicableLevels: levels.join("\n"), isRecurring: true, isActive: true });
+    setForm({ name: "", amount: "", dueDay: "10", programScope: "all", isRecurring: true, isActive: true });
     setFormOpen(true);
   }
   function openEdit(item: FeeType) {
     setEditing(item);
-    setForm({ name: item.name, amount: String(item.amount), dueDay: String(item.dueDay), applicableLevels: (item.applicableLevels ?? []).join("\n"), isRecurring: item.isRecurring, isActive: item.isActive });
+    setForm({ name: item.name, amount: String(item.amount), dueDay: String(item.dueDay), programScope: feeScopeFromItem(item), isRecurring: item.isRecurring, isActive: item.isActive });
     setFormOpen(true);
   }
   const save = useMutation({
-    mutationFn: () => apiFetch(editing ? `/fee-types/${editing.id}` : "/fee-types", { method: editing ? "PUT" : "POST", body: { name: form.name, amount: Number(form.amount), dueDay: Number(form.dueDay), applicableLevels: lines(form.applicableLevels), isRecurring: form.isRecurring, isActive: form.isActive } }),
+    mutationFn: () => {
+      const scope = feeScope(form.programScope);
+      return apiFetch(editing ? `/fee-types/${editing.id}` : "/fee-types", {
+        method: editing ? "PUT" : "POST",
+        body: {
+          name: form.name,
+          amount: Number(form.amount),
+          dueDay: Number(form.dueDay),
+          applicableLevels: scope.levels,
+          applicablePrograms: scope.programs,
+          isRecurring: form.isRecurring,
+          isActive: form.isActive,
+        },
+      });
+    },
     onSuccess: () => { toast.success("Jenis tagihan tersimpan"); setFormOpen(false); queryClient.invalidateQueries({ queryKey: ["fee-types"] }); },
     onError: (error) => toast.error(error.message),
   });
+  const currentScope = feeScope(form.programScope);
   return (
     <div className="grid gap-4">
       {!embedded ? <Breadcrumbs items={[{ label: "Keuangan", href: "/fees" }, { label: "Jenis Tagihan" }]} /> : null}
-      {!embedded ? <PageHeader title="Jenis Tagihan" description="Kelola nominal, due day, level berlaku, dan status recurring." icon={<Wallet className="h-5 w-5" />}>
+      {!embedded ? <PageHeader title="Jenis Tagihan" description="Kelola nominal, program, dan status recurring." icon={<Wallet className="h-5 w-5" />}>
         <Button onClick={openCreate}><Plus className="h-4 w-4" />Jenis baru</Button>
       </PageHeader> : null}
       {embedded ? <div className="flex justify-end"><Button onClick={openCreate}><Plus className="h-4 w-4" />Jenis baru</Button></div> : null}
       <Panel title="Daftar jenis">
         <div className="grid gap-3">
-          {items.map((item) => <article key={item.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between"><div><p className="font-bold text-[#0a1f5c]">{item.name}</p><p className="text-sm text-[#64748b]">Jatuh tempo tanggal {item.dueDay} / {(item.applicableLevels ?? []).join(", ") || "Semua level"}</p></div><div className="flex items-center gap-2"><p className="font-display text-xl font-extrabold text-[#0a1f5c]">{money(item.amount)}</p><Button tone="plain" onClick={() => openEdit(item)}><Pencil className="h-4 w-4" />Edit</Button></div></article>)}
+          {items.map((item) => {
+            const programs = (item.applicablePrograms ?? []).map((value) => feeScope(value).label).join(", ") || "Semua program";
+            const itemLevels = Array.from(new Set((item.applicableLevels ?? []).map((value) => normalizeLevel(value)))).join(", ") || "Semua kelas";
+            return (
+              <article key={item.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="font-bold text-[#0a1f5c]">{item.name}</p>
+                  <p className="text-sm text-[#64748b]">Jatuh tempo tanggal {item.dueDay} / {programs} / {itemLevels}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="font-display text-xl font-extrabold text-[#0a1f5c]">{money(item.amount)}</p>
+                  <Button tone="plain" onClick={() => openEdit(item)}><Pencil className="h-4 w-4" />Edit</Button>
+                </div>
+              </article>
+            );
+          })}
           {items.length === 0 ? <Empty text="Belum ada jenis tagihan." /> : null}
         </div>
       </Panel>
-      <Modal open={formOpen} title={editing ? "Edit jenis tagihan" : "Jenis tagihan baru"} description="Form CRUD dibuka sebagai popup agar konteks daftar tetap terlihat." onClose={() => setFormOpen(false)}>
+      <Modal open={formOpen} title={editing ? "Edit jenis tagihan" : "Jenis tagihan baru"} description="Level berlaku otomatis dari program murid." onClose={() => setFormOpen(false)}>
         <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
           <Input label="Nama" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
           <Input label="Nominal" type="number" value={form.amount} onChange={(value) => setForm({ ...form, amount: value })} required />
           <Input label="Tanggal jatuh tempo" type="number" value={form.dueDay} onChange={(value) => setForm({ ...form, dueDay: value })} required />
-          <Textarea label="Level berlaku" value={form.applicableLevels} onChange={(value) => setForm({ ...form, applicableLevels: value })} rows={3} />
+          <Select label="Program berlaku" value={form.programScope} onChange={(value) => setForm({ ...form, programScope: value })}>
+            {feeProgramScopes.map((scope) => <option key={scope.value} value={scope.value}>{scope.label}</option>)}
+          </Select>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-[#64748b]">
+            Level berlaku: {currentScope.levels.join(", ")}
+          </div>
           <label className="flex items-center gap-2 text-xs font-semibold text-[#0a1f5c]"><input type="checkbox" checked={form.isRecurring} onChange={(event) => setForm({ ...form, isRecurring: event.target.checked })} />Recurring bulanan</label>
           <label className="flex items-center gap-2 text-xs font-semibold text-[#0a1f5c]"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} />Aktif</label>
           <Button type="submit" disabled={save.isPending}><Save className="h-4 w-4" />Simpan</Button>

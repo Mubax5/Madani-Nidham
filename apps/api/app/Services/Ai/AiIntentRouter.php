@@ -35,12 +35,16 @@ class AiIntentRouter
             return self::UNCLEAR;
         }
 
-        if ($this->hasAny($text, ['ini siapa', 'kamu siapa', 'siapa kamu', 'ai siapa', 'assalam', 'assalamu', 'halo', 'hai', 'hi', 'test', 'tes'])) {
+        if ($this->isSimpleIdentityPrompt($text)) {
             return self::IDENTITY;
         }
 
         if ($this->isOutOfSystemScope($text)) {
             return self::OUT_OF_SCOPE;
+        }
+
+        if ($this->hasAny($text, ['ini siapa', 'kamu siapa', 'siapa kamu', 'ai siapa', 'assalam', 'assalamu', 'halo', 'hai', 'hi', 'test', 'tes'])) {
+            return self::IDENTITY;
         }
 
         if ($studentRoom) {
@@ -104,7 +108,7 @@ class AiIntentRouter
             return self::LEARNING;
         }
 
-        return self::AI;
+        return self::UNCLEAR;
     }
 
     private function detectStudentIntent(string $text): string
@@ -129,7 +133,7 @@ class AiIntentRouter
             return self::AGENDA;
         }
 
-        return self::AI;
+        return self::UNCLEAR;
     }
 
     private function isOutOfSystemScope(string $text): bool
@@ -139,6 +143,9 @@ class AiIntentRouter
             'cuaca', 'resep', 'masak', 'sepak bola', 'bola', 'film', 'artis',
             'saham', 'crypto', 'bitcoin', 'coding', 'programming', 'javascript',
             'php', 'laravel', 'nextjs', 'internet', 'google', 'youtube',
+            'mahasiswa', 'kuliah', 'kampus', 'teknik informatika', 'informatika',
+            'magang', 'internship', 'lowongan', 'kerja', 'perusahaan',
+            'cariin tempat', 'cari tempat',
         ];
         $strongSystemTerms = [
             'madani', 'sekolah', 'murid', 'siswa', 'anak', 'kelas', 'kb', 'tk',
@@ -161,18 +168,15 @@ class AiIntentRouter
         return $this->hasAny($text, $externalTerms);
     }
 
+    private function isSimpleIdentityPrompt(string $text): bool
+    {
+        return (bool) preg_match('/^(assalamualaikum|assalamu alaikum|assalam|halo|hai|hi|test|tes|ini siapa|kamu siapa|siapa kamu|ai siapa|anda siapa|siapa anda)[\\s?.!]*$/u', $text);
+    }
+
     private function hasAny(string $text, array $needles): bool
     {
         foreach ($needles as $needle) {
-            if (mb_strlen($needle) <= 3) {
-                if (preg_match('/(^|[^\pL\pN])'.preg_quote($needle, '/').'($|[^\pL\pN])/u', $text)) {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if (str_contains($text, $needle)) {
+            if (preg_match('/(^|[^\pL\pN])'.preg_quote($needle, '/').'($|[^\pL\pN])/u', $text)) {
                 return true;
             }
         }

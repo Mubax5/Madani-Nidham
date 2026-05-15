@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\FeeController;
 use App\Http\Controllers\Api\FinanceController;
 use App\Http\Controllers\Api\GalleryController;
 use App\Http\Controllers\Api\HafalanController;
+use App\Http\Controllers\Api\MobileParentController;
 use App\Http\Controllers\Api\PortfolioController;
 use App\Models\AcademicYear;
 use App\Models\AbsenceRequest;
@@ -124,6 +125,8 @@ Route::prefix('v1')->group(function () {
         Cache::forget('dashboard:v2:'.now()->toDateString());
         Cache::forget('dashboard:v3:'.now()->toDateString());
         Cache::forget('dashboard:v4:'.now()->toDateString());
+        User::query()->pluck('id')->each(fn ($id) => Cache::forget('dashboard:v5:'.now()->toDateString().':'.$id));
+        User::query()->pluck('id')->each(fn ($id) => Cache::forget('dashboard:v6:'.now()->toDateString().':'.$id));
     };
 
     $userPayload = function (User $user): array {
@@ -319,7 +322,7 @@ Route::prefix('v1')->group(function () {
             'parentPhone' => ['required', 'string', 'max:20'],
             'parentEmail' => ['required', 'email', 'max:150'],
             'address' => ['required', 'string', 'max:2000'],
-            'documents.*' => ['nullable', 'file', 'max:5120'],
+            'documents.*' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf,doc,docx', 'max:5120'],
         ]);
 
         $documents = [];
@@ -371,12 +374,35 @@ Route::prefix('v1')->group(function () {
         Route::put('/auth/profile', function (Request $request) use ($userPayload) {
             $data = $request->validate([
                 'name' => ['required', 'string', 'max:150'],
+                'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($request->user()->id)],
                 'phone' => ['nullable', 'string', 'max:20'],
             ]);
 
-            $request->user()->update($data);
+            $emailChanged = ! hash_equals(Str::lower($request->user()->email), Str::lower($data['email']));
+            $request->user()->fill($data);
+            if ($emailChanged) {
+                $request->user()->forceFill([
+                    'email_verified_at' => null,
+                    'google_id' => null,
+                    'google_avatar_url' => null,
+                    'google_linked_at' => null,
+                ]);
+            }
+            $request->user()->save();
 
             return ApiResponse::success($userPayload($request->user()), 'Profil berhasil diperbarui.');
+        });
+
+        Route::post('/auth/profile/photo', function (Request $request) use ($upload, $userPayload) {
+            $data = $request->validate([
+                'photo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            ]);
+
+            $request->user()->update([
+                'photo_url' => $upload($data['photo'], 'profiles'),
+            ]);
+
+            return ApiResponse::success($userPayload($request->user()->fresh('roles')), 'Foto profil berhasil diperbarui.');
         });
 
         Route::put('/auth/change-password', function (Request $request) {
@@ -438,6 +464,24 @@ Route::prefix('v1')->group(function () {
             $request->user()->update(['fcm_token' => $data['fcmToken'] ?? null]);
 
             return ApiResponse::success(null, 'Token notifikasi berhasil diperbarui.');
+        });
+
+        Route::prefix('mobile/parent')->middleware('role:orang_tua')->group(function () {
+            Route::get('/home', [MobileParentController::class, 'home']);
+            Route::get('/children', [MobileParentController::class, 'children']);
+            Route::get('/children/{student}', [MobileParentController::class, 'child']);
+            Route::get('/children/{student}/attendance', [MobileParentController::class, 'attendance']);
+            Route::get('/children/{student}/journals', [MobileParentController::class, 'journals']);
+            Route::get('/children/{student}/montessori', [MobileParentController::class, 'montessori']);
+            Route::get('/children/{student}/hafalan', [MobileParentController::class, 'hafalan']);
+            Route::get('/children/{student}/fees', [MobileParentController::class, 'fees']);
+            Route::get('/children/{student}/portfolio', [MobileParentController::class, 'portfolio']);
+            Route::get('/children/{student}/reports', [MobileParentController::class, 'reports']);
+            Route::get('/gallery', [MobileParentController::class, 'gallery']);
+            Route::get('/announcements', [MobileParentController::class, 'announcements']);
+            Route::get('/agendas', [MobileParentController::class, 'agendas']);
+            Route::get('/articles', [MobileParentController::class, 'articles']);
+            Route::get('/notifications', [MobileParentController::class, 'notifications']);
         });
 
         $attendanceByClass = function (string $today) {
@@ -591,8 +635,16 @@ Route::prefix('v1')->group(function () {
 
         $dashboardActionItems = function (string $today) {
             $activeYear = AcademicYear::where('is_active', true)->first();
-            $activeStudents = Student::where('status', 'active')->count();
-            $journalsToday = Journal::whereDate('date', $today)->count();
+            $presentStudentIds = Attendance::query()
+                ->whereDate('date', $today)
+                ->where('status', 'hadir')
+                ->pluck('student_id')
+                ->unique()
+                ->values();
+            $journalsToday = Journal::whereDate('date', $today)
+                ->whereIn('student_id', $presentStudentIds)
+                ->distinct('student_id')
+                ->count('student_id');
 
             return [
                 'absence_pending' => AbsenceRequest::where('status', 'pending')->count(),
@@ -601,7 +653,7 @@ Route::prefix('v1')->group(function () {
                 'reports_unpublished' => Report::whereNull('published_at')
                     ->when($activeYear, fn ($query) => $query->where('academic_year_id', $activeYear->id))
                     ->count(),
-                'journals_missing_today' => max($activeStudents - $journalsToday, 0),
+                'journals_missing_today' => max($presentStudentIds->count() - $journalsToday, 0),
             ];
         };
 
@@ -610,9 +662,13 @@ Route::prefix('v1')->group(function () {
             $weekStart = now()->startOfWeek()->toDateString();
             $weekEnd = now()->startOfWeek()->addDays(5)->toDateString();
             $user = $request->user()->loadMissing('roles');
-            $cacheKey = 'dashboard:v5:'.$today.':'.$user->id;
+            $isManager = $user->hasAnyRole(['super_admin', 'kepala_sekolah', 'admin']);
+            $isTeacherOnly = $user->hasRole('guru') && ! $isManager;
+            $canViewFinance = $user->can('view_fees') && ! $isTeacherOnly;
+            $canViewAnnouncements = $user->can('view_announcements') && ! $isTeacherOnly;
+            $cacheKey = 'dashboard:v6:'.$today.':'.$user->id;
 
-            $payload = Cache::remember($cacheKey, now()->addSeconds(30), function () use ($today, $weekStart, $weekEnd, $attendanceByClass, $weeklyAttendanceTrend, $montessoriSummary, $hafalanSummary, $classCapacity, $dashboardActionItems, $user) {
+            $payload = Cache::remember($cacheKey, now()->addSeconds(30), function () use ($today, $weekStart, $weekEnd, $attendanceByClass, $weeklyAttendanceTrend, $montessoriSummary, $hafalanSummary, $classCapacity, $dashboardActionItems, $user, $isTeacherOnly, $canViewFinance, $canViewAnnouncements) {
                 $todayAttendance = Attendance::query()
                     ->whereDate('date', $today)
                     ->selectRaw("
@@ -653,54 +709,72 @@ Route::prefix('v1')->group(function () {
 
                 $milestoneProgress = $montessoriSummary();
 
-                $feeCollection = StudentFee::where('year', now()->year)
-                    ->select('month')
-                    ->selectRaw('SUM(total_billed) as target')
-                    ->selectRaw('SUM(paid_amount) as paid')
-                    ->groupBy('month')
-                    ->orderBy('month')
-                    ->get();
-
-                $hafalanProgress = $hafalanSummary();
+                $feeCollection = collect();
+                $hafalanProgress = $isTeacherOnly ? collect() : $hafalanSummary();
 
                 $studentsPerClass = $classCapacity();
                 $canSeeAbsenceRequests = $user->hasAnyRole(['super_admin', 'kepala_sekolah', 'admin', 'guru']);
                 $todayAbsenceRequests = $canSeeAbsenceRequests
                     ? AbsenceRequest::with(['student.classes', 'requester'])
                         ->whereDate('date', $today)
-                        ->when($user->hasRole('guru') && ! $user->hasAnyRole(['super_admin', 'kepala_sekolah', 'admin']), fn ($query) => $query->whereHas('student.classes', fn ($classQuery) => $classQuery->where('classes.teacher_id', $user->id)))
+                        ->when($isTeacherOnly, fn ($query) => $query->whereHas('student.classes', fn ($classQuery) => $classQuery->where('classes.teacher_id', $user->id)))
                         ->latest('id')
                         ->limit(8)
                         ->get()
                     : collect();
 
-                $currentFeeQuery = StudentFee::where('month', now()->month)->where('year', now()->year);
-                $financeTarget = (int) (clone $currentFeeQuery)->sum('total_billed');
-                $financePaid = (int) (clone $currentFeeQuery)->sum('paid_amount');
-                $financeOverdueQuery = (clone $currentFeeQuery)->whereIn('status', ['unpaid', 'partial'])->whereDate('due_date', '<', now()->toDateString());
-                $enrollmentYear = AcademicYear::where('name', '2026/2027')->first()
-                    ?? AcademicYear::where('is_active', true)->first()
-                    ?? AcademicYear::latest('id')->first();
-                $enrollmentRows = EnrollmentUpdate::query()
-                    ->whereIn('category', EnrollmentUpdate::FINANCIAL_CATEGORIES)
-                    ->when($enrollmentYear, fn ($query) => $query->where('academic_year_id', $enrollmentYear->id))
-                    ->get();
-                $enrollmentTarget = (int) $enrollmentRows->sum(fn (EnrollmentUpdate $row) => max((int) ($row->target_amount ?? 0), (int) $row->paid_amount));
-                $enrollmentPaid = (int) $enrollmentRows->sum('paid_amount');
-                $payrollRows = TeacherPayroll::where('month', now()->month)->where('year', now()->year)->get();
-                $payrollTarget = (int) $payrollRows->sum('total_amount');
-                $payrollPaid = (int) $payrollRows->where('status', 'paid')->sum('total_amount');
-                $financeEntries = FinanceEntry::whereMonth('entry_date', now()->month)->whereYear('entry_date', now()->year)->get();
-                $manualIncome = (int) $financeEntries->where('type', 'income')->sum('amount');
-                $manualExpense = (int) $financeEntries->where('type', 'expense')->sum('amount');
-                $operationalExpense = (int) $financeEntries->where('type', 'expense')->where('category', 'operational')->sum('amount');
-                $financeBreakdown = collect([
-                    ['label' => 'SPP', 'type' => 'income', 'target' => $financeTarget, 'paid' => $financePaid, 'outstanding' => max($financeTarget - $financePaid, 0)],
-                    ['label' => 'Uang Pendaftaran', 'type' => 'income', 'target' => $enrollmentTarget, 'paid' => $enrollmentPaid, 'outstanding' => max($enrollmentTarget - $enrollmentPaid, 0)],
-                    ['label' => 'Gaji Guru', 'type' => 'expense', 'target' => $payrollTarget, 'paid' => $payrollPaid, 'outstanding' => max($payrollTarget - $payrollPaid, 0)],
-                    ['label' => 'Operasional', 'type' => 'expense', 'target' => $operationalExpense, 'paid' => $operationalExpense, 'outstanding' => 0],
-                    ['label' => 'Kas Manual', 'type' => 'expense', 'target' => $manualExpense, 'paid' => $manualExpense, 'outstanding' => 0],
-                ]);
+                $financeTarget = 0;
+                $financePaid = 0;
+                $enrollmentTarget = 0;
+                $enrollmentPaid = 0;
+                $payrollTarget = 0;
+                $payrollPaid = 0;
+                $manualIncome = 0;
+                $manualExpense = 0;
+                $financeStatusCounts = ['overdue' => 0, 'partial' => 0, 'unpaid' => 0, 'paid' => 0];
+                $financeBreakdown = collect();
+
+                if ($canViewFinance) {
+                    $currentFeeQuery = StudentFee::where('month', now()->month)->where('year', now()->year);
+                    $financeTarget = (int) (clone $currentFeeQuery)->sum('total_billed');
+                    $financePaid = (int) (clone $currentFeeQuery)->sum('paid_amount');
+                    $financeStatusCounts = [
+                        'overdue' => (clone $currentFeeQuery)->whereIn('status', ['unpaid', 'partial'])->whereDate('due_date', '<', now()->toDateString())->count(),
+                        'partial' => (clone $currentFeeQuery)->where('status', 'partial')->count(),
+                        'unpaid' => (clone $currentFeeQuery)->where('status', 'unpaid')->count(),
+                        'paid' => (clone $currentFeeQuery)->where('status', 'paid')->count(),
+                    ];
+                    $feeCollection = StudentFee::where('year', now()->year)
+                        ->select('month')
+                        ->selectRaw('SUM(total_billed) as target')
+                        ->selectRaw('SUM(paid_amount) as paid')
+                        ->groupBy('month')
+                        ->orderBy('month')
+                        ->get();
+                    $enrollmentYear = AcademicYear::where('name', '2026/2027')->first()
+                        ?? AcademicYear::where('is_active', true)->first()
+                        ?? AcademicYear::latest('id')->first();
+                    $enrollmentRows = EnrollmentUpdate::query()
+                        ->whereIn('category', EnrollmentUpdate::FINANCIAL_CATEGORIES)
+                        ->when($enrollmentYear, fn ($query) => $query->where('academic_year_id', $enrollmentYear->id))
+                        ->get();
+                    $enrollmentTarget = (int) $enrollmentRows->sum(fn (EnrollmentUpdate $row) => max((int) ($row->target_amount ?? 0), (int) $row->paid_amount));
+                    $enrollmentPaid = (int) $enrollmentRows->sum('paid_amount');
+                    $payrollRows = TeacherPayroll::where('month', now()->month)->where('year', now()->year)->get();
+                    $payrollTarget = (int) $payrollRows->sum('total_amount');
+                    $payrollPaid = (int) $payrollRows->where('status', 'paid')->sum('total_amount');
+                    $financeEntries = FinanceEntry::whereMonth('entry_date', now()->month)->whereYear('entry_date', now()->year)->get();
+                    $manualIncome = (int) $financeEntries->where('type', 'income')->sum('amount');
+                    $manualExpense = (int) $financeEntries->where('type', 'expense')->sum('amount');
+                    $operationalExpense = (int) $financeEntries->where('type', 'expense')->where('category', 'operational')->sum('amount');
+                    $financeBreakdown = collect([
+                        ['label' => 'SPP', 'type' => 'income', 'target' => $financeTarget, 'paid' => $financePaid, 'outstanding' => max($financeTarget - $financePaid, 0)],
+                        ['label' => 'Uang Pendaftaran', 'type' => 'income', 'target' => $enrollmentTarget, 'paid' => $enrollmentPaid, 'outstanding' => max($enrollmentTarget - $enrollmentPaid, 0)],
+                        ['label' => 'Gaji Guru', 'type' => 'expense', 'target' => $payrollTarget, 'paid' => $payrollPaid, 'outstanding' => max($payrollTarget - $payrollPaid, 0)],
+                        ['label' => 'Operasional', 'type' => 'expense', 'target' => $operationalExpense, 'paid' => $operationalExpense, 'outstanding' => 0],
+                        ['label' => 'Kas Manual', 'type' => 'expense', 'target' => $manualExpense, 'paid' => $manualExpense, 'outstanding' => 0],
+                    ]);
+                }
 
                 return [
                     'total_active_students' => Student::where('status', 'active')->count(),
@@ -712,7 +786,7 @@ Route::prefix('v1')->group(function () {
                     'attendance_by_class' => $attendanceByClass($today),
                     'today_absence_requests' => $todayAbsenceRequests,
                     'upcoming_agendas' => SchoolAgenda::whereBetween('start_date', [$today, now()->addDays(14)->toDateString()])->orderBy('start_date')->limit(6)->get(),
-                    'recent_announcements' => Announcement::whereNotNull('published_at')->latest('published_at')->limit(3)->get(),
+                    'recent_announcements' => $canViewAnnouncements ? Announcement::whereNotNull('published_at')->latest('published_at')->limit(3)->get() : collect(),
                     'attendance_this_week' => $week,
                     'action_items' => $dashboardActionItems($today),
                     'finance_summary' => [
@@ -723,10 +797,10 @@ Route::prefix('v1')->group(function () {
                         'cash_out' => $payrollPaid + $manualExpense,
                         'net_cash' => ($financePaid + $enrollmentPaid + $manualIncome) - ($payrollPaid + $manualExpense),
                         'planned_expense' => $payrollTarget + $manualExpense,
-                        'overdue_count' => (clone $financeOverdueQuery)->count(),
-                        'partial_count' => (clone $currentFeeQuery)->where('status', 'partial')->count(),
-                        'unpaid_count' => (clone $currentFeeQuery)->where('status', 'unpaid')->count(),
-                        'paid_count' => (clone $currentFeeQuery)->where('status', 'paid')->count(),
+                        'overdue_count' => $financeStatusCounts['overdue'],
+                        'partial_count' => $financeStatusCounts['partial'],
+                        'unpaid_count' => $financeStatusCounts['unpaid'],
+                        'paid_count' => $financeStatusCounts['paid'],
                         'categories' => $financeBreakdown,
                     ],
                     'analytics' => [
@@ -1277,7 +1351,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/journals', function (Request $request) use ($upload, $forgetDashboard) {
             $data = $request->validate([
                 'studentId' => ['required', 'exists:students,id'],
-                'classId' => ['required', 'exists:classes,id'],
+                'classId' => ['nullable', 'exists:classes,id'],
                 'date' => ['required', 'date', 'before_or_equal:today'],
                 'content' => ['required', 'string'],
                 'mood' => ['nullable', Rule::in(['happy', 'neutral', 'sad', 'energetic', 'tired'])],
@@ -1291,10 +1365,18 @@ Route::prefix('v1')->group(function () {
                 $photos[] = $upload($file, 'journals/'.$data['studentId']);
             }
 
+            $student = Student::with('classes')->findOrFail($data['studentId']);
+            $classId = $data['classId'] ?? $student->active_class?->id;
+            if (! $classId) {
+                return ApiResponse::error('Data kelas murid belum tersedia.', [
+                    'studentId' => ['Murid belum masuk kelas aktif.'],
+                ], 422);
+            }
+
             $journal = Journal::updateOrCreate(
                 ['student_id' => $data['studentId'], 'date' => $data['date']],
                 [
-                    'class_id' => $data['classId'],
+                    'class_id' => $classId,
                     'teacher_id' => $request->user()->id,
                     'content' => $data['content'],
                     'mood' => $data['mood'] ?? null,
@@ -1310,7 +1392,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/journals/{journal}', fn (Journal $journal) => ApiResponse::success($journal->load(['student', 'class', 'teacher']), 'Jurnal berhasil diambil.'));
 
-        Route::put('/journals/{journal}', function (Request $request, Journal $journal) {
+        Route::put('/journals/{journal}', function (Request $request, Journal $journal) use ($forgetDashboard) {
             $data = $request->validate([
                 'content' => ['required', 'string'],
                 'mood' => ['nullable', Rule::in(['happy', 'neutral', 'sad', 'energetic', 'tired'])],
@@ -1324,6 +1406,7 @@ Route::prefix('v1')->group(function () {
                 'activities' => $data['activities'] ?? [],
                 'is_published' => $data['isPublished'] ?? $journal->is_published,
             ]);
+            $forgetDashboard();
 
             return ApiResponse::success($journal, 'Jurnal berhasil diperbarui.');
         })->middleware('permission:manage_journals');
@@ -1503,18 +1586,25 @@ Route::prefix('v1')->group(function () {
         Route::post('/reports', function (Request $request) {
             $data = $request->validate([
                 'studentId' => ['required', 'exists:students,id'],
-                'classId' => ['required', 'exists:classes,id'],
+                'classId' => ['nullable', 'exists:classes,id'],
                 'academicYearId' => ['required', 'exists:academic_years,id'],
                 'semester' => ['required', Rule::in(['1', '2'])],
                 'generalNotes' => ['nullable', 'string'],
                 'characterNotes' => ['nullable', 'string'],
                 'recommendation' => ['nullable', 'string'],
             ]);
+            $student = Student::with('classes')->findOrFail($data['studentId']);
+            $classId = $data['classId'] ?? $student->active_class?->id;
+            if (! $classId) {
+                return ApiResponse::error('Data kelas murid belum tersedia.', [
+                    'studentId' => ['Murid belum masuk kelas aktif.'],
+                ], 422);
+            }
 
             $report = Report::updateOrCreate(
                 ['student_id' => $data['studentId'], 'academic_year_id' => $data['academicYearId'], 'semester' => $data['semester']],
                 [
-                    'class_id' => $data['classId'],
+                    'class_id' => $classId,
                     'general_notes' => $data['generalNotes'] ?? null,
                     'character_notes' => $data['characterNotes'] ?? null,
                     'recommendation' => $data['recommendation'] ?? null,
@@ -1537,10 +1627,13 @@ Route::prefix('v1')->group(function () {
                 'characterNotes' => ['nullable', 'string'],
                 'recommendation' => ['nullable', 'string'],
             ]);
+            $studentId = $data['studentId'] ?? $report->student_id;
+            $student = Student::with('classes')->findOrFail($studentId);
+            $classId = $data['classId'] ?? $student->active_class?->id ?? $report->class_id;
 
             $report->update([
-                'student_id' => $data['studentId'] ?? $report->student_id,
-                'class_id' => $data['classId'] ?? $report->class_id,
+                'student_id' => $studentId,
+                'class_id' => $classId,
                 'academic_year_id' => $data['academicYearId'] ?? $report->academic_year_id,
                 'semester' => $data['semester'] ?? $report->semester,
                 'general_notes' => $data['generalNotes'] ?? null,
@@ -1872,6 +1965,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/absence-requests', [AbsenceRequestController::class, 'store'])->middleware('permission:view_attendance');
         Route::get('/absence-requests/{absenceRequest}', [AbsenceRequestController::class, 'show'])->middleware('permission:manage_absence_requests|view_attendance');
         Route::put('/absence-requests/{absenceRequest}/review', [AbsenceRequestController::class, 'review'])->middleware('permission:manage_absence_requests');
+        Route::delete('/absence-requests/{absenceRequest}', [AbsenceRequestController::class, 'destroy'])->middleware('permission:manage_absence_requests');
 
         Route::get('/hafalan/summary', fn () => ApiResponse::success($hafalanSummary(), 'Ringkasan hafalan berhasil diambil.'))->middleware('permission:view_dashboard|view_hafalan|view_analytics');
 

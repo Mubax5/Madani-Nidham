@@ -374,6 +374,8 @@ class FeeController extends Controller
             'amount' => ['required', 'integer', 'min:0'],
             'dueDay' => ['nullable', 'integer', 'min:1', 'max:31'],
             'applicableLevels' => ['nullable', 'array'],
+            'applicablePrograms' => ['nullable', 'array'],
+            'applicablePrograms.*' => ['string', Rule::in(['regular', 'half_day', 'full_day'])],
             'isRecurring' => ['boolean'],
             'isActive' => ['boolean'],
         ]);
@@ -383,6 +385,7 @@ class FeeController extends Controller
             'amount' => $data['amount'],
             'due_day' => $data['dueDay'] ?? 10,
             'applicable_levels' => $data['applicableLevels'] ?? [],
+            'applicable_programs' => $data['applicablePrograms'] ?? [],
             'is_recurring' => $data['isRecurring'] ?? true,
             'is_active' => $data['isActive'] ?? true,
         ];

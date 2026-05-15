@@ -313,6 +313,16 @@ class DatabaseSeeder extends Seeder
         StudentMilestone::whereIn('student_id', $studentIds)->delete();
 
         $activeStudents = collect($students)->filter(fn (Student $demoStudent) => $demoStudent->status === 'active')->values();
+        $parent = User::updateOrCreate(
+            ['email' => 'ortu@madani-nidham.local'],
+            ['name' => 'Wali Murid Demo', 'password' => 'password', 'phone' => '000000000008', 'is_active' => true],
+        );
+        $parent->syncRoles(['orang_tua']);
+        foreach ($activeStudents->take(2)->values() as $index => $demoStudent) {
+            $demoStudent->parents()->syncWithoutDetaching([
+                $parent->id => ['relation' => $index === 0 ? 'wali' : 'ibu', 'is_primary' => $index === 0],
+            ]);
+        }
 
         foreach ($activeStudents as $index => $demoStudent) {
             $demoStudent->load('classes');

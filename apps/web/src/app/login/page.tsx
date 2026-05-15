@@ -3,15 +3,14 @@
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { apiFetch, setToken } from "@/lib/api";
+import { apiFetch, getAuthSessionKey, setToken } from "@/lib/api";
+import { authMeQueryKey, type CurrentUser } from "@/lib/use-permissions";
 
 type LoginPayload = {
   token: string;
-  user: {
-    name: string;
-    email: string;
-  };
+  user: CurrentUser;
 };
 
 function modeFromGoogleState(state: string | null) {
@@ -27,6 +26,7 @@ function modeFromGoogleState(state: string | null) {
 
 function LoginPageContent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -61,7 +61,13 @@ function LoginPageContent() {
     )
       .then((response) => {
         if ("token" in response.data) {
+          queryClient.clear();
           setToken(response.data.token);
+          queryClient.setQueryData(authMeQueryKey(getAuthSessionKey()), {
+            success: true,
+            message: "Profil berhasil diambil.",
+            data: response.data.user,
+          });
         }
         toast.success(
           mode === "link"
@@ -75,7 +81,7 @@ function LoginPageContent() {
         router.replace("/login");
       })
       .finally(() => setGoogleLoading(false));
-  }, [router, searchParams]);
+  }, [queryClient, router, searchParams]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,7 +92,13 @@ function LoginPageContent() {
         method: "POST",
         body: { email, password },
       });
+      queryClient.clear();
       setToken(response.data.token);
+      queryClient.setQueryData(authMeQueryKey(getAuthSessionKey()), {
+        success: true,
+        message: "Profil berhasil diambil.",
+        data: response.data.user,
+      });
       toast.success(`Selamat datang, ${response.data.user.name}`);
       router.push("/dashboard");
     } catch (error) {
@@ -114,35 +126,43 @@ function LoginPageContent() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f4f7fb] px-4 py-8">
-      <section className="grid w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_22px_70px_rgba(10,31,92,0.14)] lg:grid-cols-[0.92fr_1fr]">
-        <div className="madani-blue p-6 text-white lg:p-8">
+    <main className="min-h-screen bg-white lg:grid lg:grid-cols-2">
+      <section className="relative flex min-h-[42vh] overflow-hidden bg-[#0a1f5c] p-6 text-white lg:min-h-screen lg:p-10">
+        <Image
+          src="/images/generated/hero-classroom.png"
+          alt=""
+          fill
+          sizes="(min-width: 1024px) 50vw, 100vw"
+          className="object-cover"
+          priority
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(7,23,68,0.88),rgba(18,60,140,0.68)),linear-gradient(0deg,rgba(7,23,68,0.88),rgba(7,23,68,0.08)_58%,rgba(7,23,68,0.32))]" />
+        <div className="absolute inset-0 bg-[#123c8c]/28 mix-blend-multiply" />
+        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-[linear-gradient(0deg,rgba(7,23,68,0.92),transparent)]" />
+        <div className="relative z-10 mt-auto max-w-xl">
           <Image
             src="/images/logo-madani-montessori.png"
             alt="Logo Madani"
-            width={58}
-            height={58}
-            className="rounded-2xl border border-[#f5c542]/60 bg-white p-1"
+            width={76}
+            height={76}
+            className="rounded-full border border-[#f5c542]/70 bg-white p-1.5 shadow-[0_20px_60px_rgba(0,0,0,0.22)]"
+            priority
           />
           <p className="mt-8 text-xs font-extrabold uppercase text-[#ffe08a]">
-            Dashboard Akademik
+            Sistem Informasi Akademik
           </p>
-          <h1 className="font-display mt-2 text-4xl font-extrabold leading-none">
+          <h1 className="font-display mt-2 text-5xl font-extrabold leading-[0.9] sm:text-6xl">
             Madani Nidham
           </h1>
-          <p className="mt-4 max-w-md text-sm leading-6 text-white/76">
-            Sistem kerja admin dan guru untuk murid, kelas, absensi, jurnal,
-            penilaian Montessori, raport, pengumuman, agenda, dan PPDB.
+          <p className="mt-4 max-w-md text-sm font-medium leading-6 text-white/78">
+            Operasional sekolah, akademik, komunikasi, dan layanan orang tua
+            dalam satu dashboard.
           </p>
-          <div className="mt-7 grid grid-cols-2 gap-2 text-xs font-bold">
-            <span className="rounded-xl bg-white/10 px-3 py-2">Admin</span>
-            <span className="rounded-xl bg-white/10 px-3 py-2">Guru</span>
-            <span className="rounded-xl bg-white/10 px-3 py-2">Raport</span>
-            <span className="rounded-xl bg-white/10 px-3 py-2">PPDB</span>
-          </div>
         </div>
+      </section>
 
-        <form onSubmit={submit} className="p-6 lg:p-8">
+      <section className="flex min-h-[58vh] items-center justify-center px-5 py-8 lg:min-h-screen lg:px-10">
+        <form onSubmit={submit} className="w-full max-w-[390px]">
           <p className="text-xs font-extrabold uppercase text-[#123c8c]">
             Login
           </p>

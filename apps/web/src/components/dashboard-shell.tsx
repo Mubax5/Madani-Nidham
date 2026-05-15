@@ -17,6 +17,7 @@ import {
   Landmark,
   LayoutDashboard,
   LogOut,
+  Menu,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -33,7 +34,8 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch, clearToken, getToken } from "@/lib/api";
 import {
@@ -41,6 +43,12 @@ import {
   navigationConfig,
   type NavigationItem,
 } from "@/lib/navigation";
+import {
+  type NavWarmCache,
+  warmNavAssets,
+  warmNavData,
+  warmNavTarget,
+} from "@/lib/nav-prefetch";
 import { usePermissions } from "@/lib/use-permissions";
 
 const iconMap = {
@@ -165,20 +173,23 @@ function AiSuggestionChips({
 }) {
   const items = manager
     ? [
-        "Akun guru ada berapa?",
-        "Siapa kepala sekolah?",
-        "Ringkas keuangan bulan ini",
-        "Berapa gaji guru?",
-        "Absensi hari ini",
-        "Daftar murid aktif",
-        "PPDB 2026/2027",
+        "Jurnal siswa hadir mana yang belum diisi hari ini?",
+        "Kelas mana yang absensinya belum lengkap hari ini?",
+        "Siapa murid izin atau sakit hari ini?",
+        "Tagihan SPP mana yang belum lunas bulan ini?",
+        "PPDB mana yang perlu direview?",
+        "Raport mana yang belum dipublish semester ini?",
+        "Ringkas agenda sekolah minggu ini",
+        "Ringkas arus kas bulan ini",
       ]
     : [
-        "Absensi anak bulan ini",
-        "Jurnal terakhir",
-        "Progress Montessori",
-        "Hafalan terbaru",
-        "Agenda minggu ini",
+        "Anak saya hadir hari ini?",
+        "Jurnal terakhir anak saya apa?",
+        "Ada catatan yang belum dibaca?",
+        "Progress Montessori anak saya",
+        "Hafalan terbaru anak saya",
+        "Tagihan yang belum lunas",
+        "Agenda sekolah minggu ini",
       ];
 
   return (
@@ -391,9 +402,12 @@ function AiRichMessage({ text }: { text: string }) {
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiHidden, setAiHidden] = useState(false);
+  const [aiNudgeVisible, setAiNudgeVisible] = useState(false);
   const [aiStudents, setAiStudents] = useState<AiStudent[]>([]);
   const [aiStudentId, setAiStudentId] = useState("");
   const [aiInput, setAiInput] = useState("");
@@ -405,6 +419,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [googleLinkLoading, setGoogleLinkLoading] = useState(false);
   const aiScrollRef = useRef<HTMLDivElement | null>(null);
   const aiInputRef = useRef<HTMLInputElement | null>(null);
+  const navWarmCacheRef = useRef<NavWarmCache>({
+    keys: new Set(),
+    paths: new Map(),
+  });
   const permissions = usePermissions();
   const user = permissions.user;
   const canUseAi = permissions.can("use_ai_chat");
@@ -421,6 +439,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     );
     setAiHidden(localStorage.getItem("madani_ai_hidden") === "1");
   }, []);
+
+  useEffect(() => {
+    if (!canUseAi || !userId) return;
+    setAiNudgeVisible(false);
+    const id = window.setTimeout(() => setAiNudgeVisible(true), 60000);
+    return () => window.clearTimeout(id);
+  }, [canUseAi, userId]);
+
+  useEffect(() => {
+    if (aiOpen || aiHidden) setAiNudgeVisible(false);
+  }, [aiHidden, aiOpen]);
 
   useEffect(() => {
     if (!aiOpen || !userId || !canUseAi || !isParent) return;
@@ -484,46 +513,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       const status = (permissions.error as { status?: number } | null)?.status;
       if (status === 401 || status === 403) {
         clearToken();
+        queryClient.clear();
         router.replace("/login");
       }
     }
-  }, [permissions.error, permissions.isError, router]);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const warmCoreRoutes = () => {
-      [
-        "/dashboard",
-        "/students",
-        "/attendance",
-        "/fees",
-        "/finance",
-        "/teacher-payrolls",
-        "/enrollment-updates",
-      ].forEach((href) => router.prefetch(href));
-
-      void import("@/components/fast-pages/dashboard-home");
-      void import("@/components/fast-pages/students-page");
-      void import("@/components/fast-pages/attendance-page");
-      void import("@/components/fast-pages/fees-page");
-      void import("@/components/fast-pages/finance-overview-page");
-      void import("@/components/fast-pages/teacher-payrolls-page");
-      void import("@/components/fast-pages/enrollment-updates-page");
-    };
-
-    if ("requestIdleCallback" in window) {
-      const id = window.requestIdleCallback(warmCoreRoutes, { timeout: 2500 });
-      return () => window.cancelIdleCallback(id);
-    }
-
-    const id = setTimeout(warmCoreRoutes, 1200);
-    return () => clearTimeout(id);
-  }, [router, userId]);
+  }, [permissions.error, permissions.isError, queryClient, router]);
 
   function logout() {
     apiFetch<null>("/auth/logout", { method: "POST" }).catch(() => null);
     clearToken();
+    queryClient.clear();
     toast.success("Logout berhasil");
     router.replace("/login");
   }
@@ -549,11 +548,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   function hideAi() {
     setAiOpen(false);
     setAiHidden(true);
+    setAiNudgeVisible(false);
     localStorage.setItem("madani_ai_hidden", "1");
   }
 
   function showAi() {
     setAiHidden(false);
+    setAiNudgeVisible(false);
     localStorage.setItem("madani_ai_hidden", "0");
     setAiOpen(true);
   }
@@ -614,28 +615,115 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   const sidebarWidth = sidebarCollapsed ? 84 : 252;
-  const navGroups = navigationConfig
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => permissions.can(item.permission)),
-    }))
-    .filter((group) => group.items.length > 0);
-  const bottomNav = bottomNavigationConfig.filter((item) =>
-    permissions.can(item.permission),
+  const roleSet = useMemo(() => new Set(user?.roles ?? []), [user?.roles]);
+  const permissionSet = useMemo(
+    () => new Set(permissions.permissions),
+    [permissions.permissions],
+  );
+  const itemAllowed = useCallback(
+    (item: NavigationItem) => {
+      if (item.hiddenForRoles?.some((role) => roleSet.has(role))) return false;
+      if (item.href === "/dashboard") return true;
+      return permissionSet.has(item.permission);
+    },
+    [permissionSet, roleSet],
+  );
+  const navGroups = useMemo(
+    () =>
+      navigationConfig
+        .map((group) => ({
+          ...group,
+          items: group.items.filter(itemAllowed),
+        }))
+        .filter((group) => group.items.length > 0),
+    [itemAllowed],
+  );
+  const bottomNav = useMemo(
+    () => bottomNavigationConfig.filter(itemAllowed),
+    [itemAllowed],
+  );
+  const allowedNavItems = useMemo(
+    () => [...navGroups.flatMap((group) => group.items), ...bottomNav],
+    [bottomNav, navGroups],
   );
   const normalizedPathname =
     pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  const activeHref = [
-    ...navGroups.flatMap((group) => group.items),
-    ...bottomNav,
-  ]
-    .filter(
+  const activeHref = useMemo(
+    () =>
+      allowedNavItems
+        .filter(
+          (item) =>
+            normalizedPathname === item.href ||
+            normalizedPathname.startsWith(`${item.href}/`),
+        )
+        .sort((a, b) => b.href.length - a.href.length)[0]?.href,
+    [allowedNavItems, normalizedPathname],
+  );
+  const isActive = (item: NavigationItem) => item.href === activeHref;
+  const warmNavItem = useCallback(
+    (href: string) => {
+      void warmNavTarget(router, queryClient, href, navWarmCacheRef.current);
+    },
+    [queryClient, router],
+  );
+  useEffect(() => {
+    navWarmCacheRef.current.keys.clear();
+    navWarmCacheRef.current.paths.clear();
+  }, [userId]);
+  useEffect(() => {
+    if (!userId || allowedNavItems.length === 0) return;
+
+    const hrefs = Array.from(new Set(allowedNavItems.map((item) => item.href)));
+    const dataHrefs = hrefs.filter((href) => href !== activeHref);
+    let cancelled = false;
+    let dataIndex = 0;
+    const timeoutIds: number[] = [];
+
+    const after = (delay: number, task: () => void) => {
+      timeoutIds.push(window.setTimeout(task, delay));
+    };
+
+    after(180, () => {
+      if (!cancelled) hrefs.forEach((href) => warmNavAssets(router, href));
+    });
+
+    const scheduleDataWarmup = (delay = 160) => {
+      after(delay, runDataWarmup);
+    };
+
+    const runDataWarmup = () => {
+      if (cancelled) return;
+      const href = dataHrefs[dataIndex];
+      dataIndex += 1;
+      if (!href) {
+        if (dataIndex < dataHrefs.length) scheduleDataWarmup();
+        return;
+      }
+      void warmNavData(queryClient, href, navWarmCacheRef.current).finally(() => {
+        if (!cancelled && dataIndex < dataHrefs.length) scheduleDataWarmup();
+      });
+    };
+
+    scheduleDataWarmup(450);
+
+    return () => {
+      cancelled = true;
+      timeoutIds.forEach((id) => window.clearTimeout(id));
+    };
+  }, [activeHref, allowedNavItems, queryClient, router, userId]);
+  useEffect(() => {
+    if (!user || pathname === "/profile") return;
+    const allowed = allowedNavItems.some(
       (item) =>
         normalizedPathname === item.href ||
         normalizedPathname.startsWith(`${item.href}/`),
-    )
-    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
-  const isActive = (item: NavigationItem) => item.href === activeHref;
+    );
+    if (!allowed) {
+      const nextHref = allowedNavItems[0]?.href ?? "/dashboard";
+      router.replace(nextHref);
+      toast.error("Menu ini tidak tersedia untuk role akun ini.");
+    }
+  }, [allowedNavItems, normalizedPathname, pathname, router, user]);
   const selectedAiStudent = aiStudents.find(
     (student) => String(student.id) === aiStudentId,
   );
@@ -647,7 +735,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <Link
         key={item.href}
         href={item.href}
-        prefetch={false}
         title={sidebarCollapsed ? item.label : undefined}
         className={`inline-flex min-h-9 shrink-0 items-center gap-2.5 rounded-xl px-2.5 text-[13px] font-semibold transition lg:w-full ${
           sidebarCollapsed ? "lg:justify-center lg:px-0" : ""
@@ -656,6 +743,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             ? "bg-white/95 text-[#0a1f5c]"
             : "text-white/74 hover:bg-white/10 hover:text-white"
         }`}
+        onFocus={() => warmNavItem(item.href)}
+        onMouseEnter={() => warmNavItem(item.href)}
+        onClick={() => {
+          warmNavItem(item.href);
+          setMobileSidebarOpen(false);
+        }}
       >
         <Icon className="h-3.5 w-3.5" />
         <span className={sidebarCollapsed ? "lg:hidden" : ""}>
@@ -675,13 +768,23 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         } as React.CSSProperties
       }
     >
+      {mobileSidebarOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-slate-950/35 lg:hidden"
+          aria-label="Tutup menu"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      ) : null}
       <aside
-        className={`madani-blue fixed inset-x-0 top-0 z-30 flex border-b border-white/10 px-3 py-2.5 text-white transition-[width] duration-200 lg:inset-y-0 lg:right-auto lg:h-dvh lg:flex-col lg:border-b-0 lg:border-r lg:px-4 lg:py-4 ${
+        className={`madani-blue fixed inset-y-0 left-0 z-40 ${
+          mobileSidebarOpen ? "flex w-[280px]" : "hidden"
+        } flex-col border-r border-white/10 px-4 py-4 text-white transition-[width] duration-200 lg:flex ${
           sidebarCollapsed ? "lg:w-[84px]" : "lg:w-[252px]"
         }`}
       >
         <div
-          className={`flex items-center ${sidebarCollapsed ? "lg:justify-center" : "gap-3"}`}
+          className={`flex items-center justify-between gap-3 ${sidebarCollapsed ? "lg:justify-center" : ""}`}
         >
           <div
             className={`flex items-center ${sidebarCollapsed ? "lg:justify-center" : "gap-3"}`}
@@ -702,17 +805,25 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               </p>
             </div>
           </div>
+          <button
+            type="button"
+            className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white lg:hidden"
+            aria-label="Tutup sidebar"
+            onClick={() => setMobileSidebarOpen(false)}
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        <nav className="madani-sidebar-scroll ml-3 flex flex-1 gap-1.5 overflow-x-auto pb-1 lg:ml-0 lg:mt-7 lg:grid lg:min-h-0 lg:content-start lg:gap-5 lg:overflow-x-hidden lg:overflow-y-auto lg:pb-4 lg:pr-1.5">
+        <nav className="madani-sidebar-scroll mt-6 grid min-h-0 flex-1 content-start gap-5 overflow-y-auto pb-4 pr-1.5">
           {navGroups.map((group) => (
             <div key={group.label} className="grid shrink-0 gap-1.5 lg:shrink">
               <p
-                className={`hidden px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white/42 lg:block ${sidebarCollapsed ? "lg:hidden" : ""}`}
+                className={`px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white/42 ${sidebarCollapsed ? "lg:hidden" : ""}`}
               >
                 {group.label}
               </p>
-              <div className="flex gap-1.5 lg:grid">
+              <div className="grid gap-1.5">
                 {group.items.map(renderNavItem)}
               </div>
             </div>
@@ -720,13 +831,39 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         {bottomNav.length > 0 ? (
-          <div className="hidden border-t border-white/10 pt-3 lg:mt-auto lg:grid lg:gap-2">
+          <div className="mt-auto grid gap-2 border-t border-white/10 pt-3">
             {bottomNav.map(renderNavItem)}
           </div>
         ) : null}
       </aside>
 
-      <main className="min-w-0 pt-[92px] lg:col-start-2 lg:min-h-dvh lg:pt-0">
+      <main className="min-w-0 pt-14 lg:col-start-2 lg:min-h-dvh lg:pt-0">
+        <header className="fixed inset-x-0 top-0 z-20 flex h-14 items-center justify-between border-b border-[#0a1f5c]/8 bg-white/94 px-3 backdrop-blur lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(true)}
+            className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-[#0a1f5c]"
+            aria-label="Buka menu"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+          <div className="min-w-0 px-3 text-center">
+            <p className="truncate text-xs font-semibold text-[#64748b]">
+              Assalamualaikum
+            </p>
+            <p className="truncate font-display text-lg font-extrabold text-[#0a1f5c]">
+              {user?.name ?? "Madani Nidham"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/profile")}
+            className="grid h-9 w-9 place-items-center rounded-full border border-[#0a1f5c]/10 bg-white text-[#0a1f5c]"
+            aria-label="Profil"
+          >
+            <UserCog className="h-4 w-4" />
+          </button>
+        </header>
         <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between border-b border-[#0a1f5c]/8 bg-white/92 px-6 backdrop-blur lg:flex">
           <div className="flex items-center gap-3">
             <button
@@ -756,13 +893,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <div className="group relative flex items-center">
             <button
               type="button"
+              onClick={() => router.push("/profile")}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-[#0a1f5c]/10 bg-white text-[#0a1f5c] transition hover:border-[#0a1f5c]/20"
               aria-label="Menu profil"
             >
               <UserCog className="h-4 w-4" />
             </button>
-            <div className="invisible absolute right-0 top-11 z-30 w-64 translate-y-1 rounded-2xl border border-slate-200 bg-white p-2 opacity-0 shadow-[0_18px_45px_rgba(10,31,92,0.16)] transition group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100">
-              <div className="border-b border-slate-100 px-3 py-2">
+            <div className="invisible absolute right-0 top-11 z-30 w-56 translate-y-1 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-[0_12px_34px_rgba(10,31,92,0.14)] transition group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100">
+              <div className="border-b border-slate-100 px-2 py-1.5">
                 <p className="truncate text-sm font-bold text-[#0a1f5c]">
                   {user?.name ?? "Profil"}
                 </p>
@@ -772,8 +910,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               </div>
               <button
                 type="button"
-                onClick={() => setProfileOpen(true)}
-                className="mt-2 flex h-9 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-[#0a1f5c] transition hover:bg-slate-50"
+                onClick={() => router.push("/profile")}
+                className="mt-2 flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-xs font-semibold text-[#0a1f5c] transition hover:bg-slate-50"
               >
                 <UserCog className="h-4 w-4" />
                 Profil
@@ -781,7 +919,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={logout}
-                className="flex h-9 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+                className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
               >
                 <LogOut className="h-4 w-4" />
                 Logout
@@ -940,18 +1078,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                         </div>
                       ) : null}
                       <div
-                        className={`rounded-2xl px-3 py-2 text-sm leading-6 shadow-sm ${
+                        className={`w-fit rounded-2xl px-3 py-2 text-sm leading-6 shadow-sm ${
                           item.role === "user"
                             ? "ml-auto max-w-[86%] rounded-br-md bg-[#0a1f5c] text-white"
                             : "max-w-[96%] rounded-bl-md bg-white text-[#334155] ring-1 ring-slate-200"
                         }`}
                       >
                         <AiRichMessage text={item.message} />
-                        {item.role === "model" && item.sourceLabel ? (
-                          <p className="mt-2 text-[10px] font-semibold text-[#94a3b8]">
-                            {item.sourceLabel}
-                          </p>
-                        ) : null}
                         <p
                           className={`mt-1 text-right text-[10px] font-semibold ${item.role === "user" ? "text-white/65" : "text-[#94a3b8]"}`}
                         >
@@ -1002,23 +1135,46 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               </form>
             </section>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setAiOpen((current) => !current)}
-            className="ml-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#0a1f5c] text-white shadow-[0_14px_32px_rgba(10,31,92,0.24)]"
-            aria-label="Buka chat AI"
-          >
-            <Bot className="h-5 w-5" />
-          </button>
+          <div className="flex items-end justify-end gap-2">
+            {aiNudgeVisible && !aiOpen ? (
+              <button
+                type="button"
+                onClick={() => setAiOpen(true)}
+                className="mb-2 max-w-[230px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold leading-5 text-[#0a1f5c] shadow-[0_10px_28px_rgba(10,31,92,0.14)]"
+              >
+                Assalamualaikum, klik AI untuk bantu cek data sekolah.
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setAiOpen((current) => !current)}
+              className="grid h-16 w-16 place-items-center bg-transparent p-0 transition hover:scale-[1.03]"
+              aria-label="Buka chat AI"
+            >
+              <Image
+                src="/images/generated/madani-chat.png"
+                alt=""
+                width={74}
+                height={74}
+                className="h-16 w-16 object-contain"
+              />
+            </button>
+          </div>
         </div>
       ) : canUseAi ? (
         <button
           type="button"
           onClick={showAi}
-          className="fixed bottom-4 right-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-[#0a1f5c] shadow-sm lg:right-6"
+          className="fixed bottom-4 right-4 z-40 grid h-12 w-12 place-items-center bg-transparent p-0 transition hover:scale-[1.03] lg:right-6"
           aria-label="Tampilkan chat AI"
         >
-          <Bot className="h-4 w-4" />
+          <Image
+            src="/images/generated/madani-chat-minimize.png"
+            alt=""
+            width={48}
+            height={48}
+            className="h-11 w-11 object-contain"
+          />
         </button>
       ) : null}
     </div>

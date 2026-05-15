@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, Banknote, Bell, CalendarDays, CalendarOff, Check, ChevronRight, ClipboardCheck, Moon, NotebookPen, Settings, Sparkles, Star, Trophy, UserRoundCog, Users, Wallet } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, scopedQueryKey } from "@/lib/api";
 import { usePermissions } from "@/lib/use-permissions";
 import { EmptyState, StatusBadge, formatDate, formatMoney, statusLabel, type Agenda, type Announcement, type DashboardData } from "./workspace-shared";
 
@@ -22,12 +22,16 @@ function ChartLoading() {
 
 export function DashboardHome() {
   const [mounted, setMounted] = useState(false);
-  const { hasRole } = usePermissions();
+  const permissions = usePermissions();
+  const { hasRole, can, sessionKey, user } = permissions;
+  const isParentRole = hasRole("orang_tua");
   const { data, isLoading } = useQuery({
-    queryKey: ["dashboard"],
+    queryKey: scopedQueryKey(["dashboard"]),
     queryFn: () => apiFetch<DashboardData>("/dashboard"),
+    enabled: Boolean(user) && !isParentRole,
   });
   useEffect(() => setMounted(true), []);
+  if (isParentRole) return <ParentDashboardHome />;
   const stats = data?.data;
   const totalStudents = stats?.totalActiveStudents ?? 0;
   const canSeeAbsenceRequests =
@@ -35,6 +39,11 @@ export function DashboardHome() {
     hasRole("kepala_sekolah") ||
     hasRole("admin") ||
     hasRole("guru");
+  const isTeacherOnly =
+    hasRole("guru") &&
+    !hasRole("super_admin") &&
+    !hasRole("kepala_sekolah") &&
+    !hasRole("admin");
 
   const daily = [
     {
@@ -81,7 +90,7 @@ export function DashboardHome() {
             },
             {
               href: "/journals",
-              label: "Tulis jurnal",
+              label: "Jurnal",
               icon: <NotebookPen className="h-4 w-4" />,
             },
             {
@@ -156,25 +165,29 @@ export function DashboardHome() {
                 mounted={mounted}
                 rows={stats?.analytics?.milestoneProgress ?? []}
               />
-              <ActionItemList actionItems={stats?.actionItems} />
+            <ActionItemList actionItems={stats?.actionItems} />
             </div>
           </div>
         </section>
 
-        <section className="mt-6">
-          <DashboardSectionHeader title="Keuangan & Operasional" />
-          <div className="grid items-start gap-4 xl:grid-cols-[5fr_4fr_3fr]">
-            <FinancialCategoryBreakdown finance={stats?.financeSummary} />
-            <HafalanDonutChart
-              mounted={mounted}
-              rows={stats?.analytics?.hafalanProgress ?? []}
-            />
-            <DashboardAnnouncementList
-              announcements={stats?.recentAnnouncements ?? []}
-              isLoading={isLoading}
-            />
-          </div>
-        </section>
+        {!isTeacherOnly && (can("view_fees") || can("view_announcements")) ? (
+          <section className="mt-6">
+            <DashboardSectionHeader title="Keuangan & Operasional" />
+            <div className="grid items-start gap-4 xl:grid-cols-[5fr_4fr_3fr]">
+              {can("view_fees") ? <FinancialCategoryBreakdown finance={stats?.financeSummary} /> : null}
+              <HafalanDonutChart
+                mounted={mounted}
+                rows={stats?.analytics?.hafalanProgress ?? []}
+              />
+              {can("view_announcements") ? (
+                <DashboardAnnouncementList
+                  announcements={stats?.recentAnnouncements ?? []}
+                  isLoading={isLoading}
+                />
+              ) : null}
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-6">
           <DashboardSectionHeader title="Kilas Tindak Lanjut" />
@@ -182,6 +195,107 @@ export function DashboardHome() {
         </section>
       </div>
     </div>
+  );
+}
+
+type ParentHomeData = {
+  parent?: { name?: string; email?: string; phone?: string | null };
+  children: Array<{ id: number; fullName: string; nickname?: string | null; programLabel?: string | null; classes?: Array<{ name: string; level: string }> }>;
+  today: {
+    date: string;
+    attendance: Array<{ id: number; status: string; student?: { fullName?: string; nickname?: string | null } }>;
+    absenceRequests: Array<{ id: number; type: string; status: string; reason?: string | null; student?: { fullName?: string } }>;
+  };
+  summary: { childrenCount: number; unreadNotifications: number; pendingFees: number; pendingAbsenceRequests: number };
+  latestJournals: Array<{ id: number; date: string; content: string; student?: { fullName?: string; nickname?: string | null } }>;
+  announcements: Array<{ id: number; title: string; publishedAt?: string | null }>;
+  agendas: Array<{ id: number; title?: string; name?: string; startDate: string }>;
+};
+
+function ParentDashboardHome() {
+  const { sessionKey, user, hasRole } = usePermissions();
+  const { data, isLoading } = useQuery({
+    queryKey: ["session", sessionKey, "parent-home"],
+    queryFn: () => apiFetch<ParentHomeData>("/mobile/parent/home"),
+    enabled: Boolean(user) && hasRole("orang_tua"),
+  });
+  const home = data?.data;
+  const cards = [
+    { label: "Anak", value: home?.summary.childrenCount ?? 0, caption: "Data anak terhubung" },
+    { label: "Tagihan aktif", value: home?.summary.pendingFees ?? 0, caption: "Belum lunas / sebagian" },
+    { label: "Izin diproses", value: home?.summary.pendingAbsenceRequests ?? 0, caption: "Menunggu konfirmasi" },
+    { label: "Notifikasi", value: home?.summary.unreadNotifications ?? 0, caption: "Belum dibaca" },
+  ];
+
+  return (
+    <div className="grid gap-4">
+      <section className="rounded-lg border border-[#0a1f5c]/10 bg-white p-4">
+        <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748b]">Dashboard Orang Tua</p>
+        <h2 className="font-display mt-1 text-3xl font-extrabold text-[#0a1f5c]">Data anak & informasi sekolah</h2>
+        <p className="mt-1 text-sm text-[#64748b]">Mode orang tua hanya menampilkan data terpublikasi dan data anak yang terhubung.</p>
+      </section>
+      <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map((item) => (
+          <article key={item.label} className="rounded-lg border border-slate-200 bg-white p-4">
+            <p className="text-xs font-medium text-[#64748b]">{item.label}</p>
+            <p className="font-display mt-1 text-3xl font-extrabold text-[#0a1f5c]">{isLoading ? "-" : item.value}</p>
+            <p className="mt-1 text-[11px] font-medium text-[#64748b]">{item.caption}</p>
+          </article>
+        ))}
+      </section>
+      <section className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+        <DashboardCard title="Anak Terhubung" subtitle="Ringkasan kelas dan program">
+          <div className="grid gap-2">
+            {(home?.children ?? []).map((child) => (
+              <div key={child.id} className="rounded-lg border border-slate-200 p-3">
+                <p className="font-bold text-[#0a1f5c]">{child.fullName}</p>
+                <p className="mt-1 text-xs text-[#64748b]">{child.classes?.[0]?.name ?? "Belum ada kelas"} / {child.programLabel ?? "Program belum diisi"}</p>
+              </div>
+            ))}
+            {!isLoading && (home?.children ?? []).length === 0 ? <EmptyState text="Belum ada anak terhubung ke akun ini." /> : null}
+          </div>
+        </DashboardCard>
+        <DashboardCard title="Hari Ini" subtitle="Absensi dan perizinan anak">
+          <div className="grid gap-2">
+            {(home?.today.attendance ?? []).map((item) => (
+              <div key={`att-${item.id}`} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                <span className="text-sm font-semibold text-[#0a1f5c]">{item.student?.fullName ?? "Anak"}</span>
+                <StatusBadge value={item.status} />
+              </div>
+            ))}
+            {(home?.today.absenceRequests ?? []).map((item) => (
+              <div key={`abs-${item.id}`} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <p className="text-sm font-semibold text-amber-800">{item.student?.fullName ?? "Anak"} / {statusLabel(item.type)}</p>
+                <p className="mt-0.5 text-xs text-amber-700">{item.reason ?? "Tanpa catatan."}</p>
+              </div>
+            ))}
+            {!isLoading && (home?.today.attendance ?? []).length === 0 && (home?.today.absenceRequests ?? []).length === 0 ? <EmptyState text="Belum ada data hari ini." /> : null}
+          </div>
+        </DashboardCard>
+      </section>
+      <section className="grid gap-4 xl:grid-cols-3">
+        <SimpleParentList title="Jurnal terbaru" rows={(home?.latestJournals ?? []).map((item) => ({ id: item.id, title: item.student?.fullName ?? "Jurnal", meta: formatDate(item.date), body: item.content }))} />
+        <SimpleParentList title="Pengumuman" rows={(home?.announcements ?? []).map((item) => ({ id: item.id, title: item.title, meta: item.publishedAt ? formatDate(item.publishedAt) : "Aktif" }))} />
+        <SimpleParentList title="Agenda" rows={(home?.agendas ?? []).map((item) => ({ id: item.id, title: item.title ?? item.name ?? "Agenda", meta: formatDate(item.startDate) }))} />
+      </section>
+    </div>
+  );
+}
+
+function SimpleParentList({ title, rows }: { title: string; rows: Array<{ id: number; title: string; meta?: string; body?: string }> }) {
+  return (
+    <DashboardCard title={title} subtitle="Data terbaru">
+      <div className="grid gap-2">
+        {rows.slice(0, 5).map((row) => (
+          <article key={row.id} className="rounded-lg border border-slate-200 p-3">
+            <p className="line-clamp-1 font-semibold text-[#0a1f5c]">{row.title}</p>
+            {row.meta ? <p className="mt-0.5 text-xs text-[#64748b]">{row.meta}</p> : null}
+            {row.body ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#334155]">{row.body}</p> : null}
+          </article>
+        ))}
+        {rows.length === 0 ? <EmptyState text="Belum ada data." /> : null}
+      </div>
+    </DashboardCard>
   );
 }
 
@@ -569,6 +683,12 @@ function CashCategoryRow({
 }
 
 function ActionItemList({ actionItems }: { actionItems?: ActionItems }) {
+  const { can, hasRole } = usePermissions();
+  const isTeacherOnly =
+    hasRole("guru") &&
+    !hasRole("super_admin") &&
+    !hasRole("kepala_sekolah") &&
+    !hasRole("admin");
   const items = [
     {
       label: "Izin absensi menunggu",
@@ -576,6 +696,7 @@ function ActionItemList({ actionItems }: { actionItems?: ActionItems }) {
       href: "/absence-requests",
       color: "bg-rose-500",
       urgency: 1,
+      visible: can("manage_absence_requests"),
     },
     {
       label: "Tagihan SPP belum dibayar",
@@ -583,6 +704,7 @@ function ActionItemList({ actionItems }: { actionItems?: ActionItems }) {
       href: "/fees",
       color: "bg-amber-400",
       urgency: 2,
+      visible: can("view_fees") && !isTeacherOnly,
     },
     {
       label: "PPDB menunggu review",
@@ -590,6 +712,7 @@ function ActionItemList({ actionItems }: { actionItems?: ActionItems }) {
       href: "/registrations",
       color: "bg-orange-500",
       urgency: 3,
+      visible: can("view_registrations") && !isTeacherOnly,
     },
     {
       label: "Raport belum dipublish",
@@ -597,15 +720,9 @@ function ActionItemList({ actionItems }: { actionItems?: ActionItems }) {
       href: "/reports",
       color: "bg-amber-400",
       urgency: 4,
+      visible: can("view_reports"),
     },
-    {
-      label: "Jurnal belum diisi hari ini",
-      count: actionItems?.journalsMissingToday ?? 0,
-      href: "/journals",
-      color: "bg-blue-500",
-      urgency: 5,
-    },
-  ].sort((a, b) => a.urgency - b.urgency);
+  ].filter((item) => item.visible).sort((a, b) => a.urgency - b.urgency);
   const total = items.reduce((sum, item) => sum + item.count, 0);
 
   return (
@@ -657,6 +774,12 @@ function ActionItemList({ actionItems }: { actionItems?: ActionItems }) {
 }
 
 function DashboardFollowUpGrid({ stats }: { stats?: DashboardData }) {
+  const { can, hasRole } = usePermissions();
+  const isTeacherOnly =
+    hasRole("guru") &&
+    !hasRole("super_admin") &&
+    !hasRole("kepala_sekolah") &&
+    !hasRole("admin");
   const attendanceRows = stats?.attendanceByClass ?? [];
   const incompleteAttendance = attendanceRows.filter((row) => {
     const recorded = row.hadir + row.izin + row.sakit + row.alfa;
@@ -664,11 +787,11 @@ function DashboardFollowUpGrid({ stats }: { stats?: DashboardData }) {
   });
   const finance = stats?.financeSummary;
   const actions = [
-    { label: "Lengkapi absensi", value: `${incompleteAttendance.length} kelas`, href: "/attendance" },
-    { label: "Tagihan aktif", value: `${(finance?.unpaidCount ?? 0) + (finance?.partialCount ?? 0)} invoice`, href: "/fees" },
-    { label: "Kas bersih", value: formatMoney(finance?.netCash), href: "/finance" },
-    { label: "Audit kas", value: "Lihat transaksi", href: "/finance/audit" },
-  ];
+    { label: "Lengkapi absensi", value: `${incompleteAttendance.length} kelas`, href: "/attendance", visible: can("view_attendance") },
+    { label: "Tagihan aktif", value: `${(finance?.unpaidCount ?? 0) + (finance?.partialCount ?? 0)} invoice`, href: "/fees", visible: can("view_fees") && !isTeacherOnly },
+    { label: "Kas bersih", value: formatMoney(finance?.netCash), href: "/finance", visible: can("view_fees") && !isTeacherOnly },
+    { label: "Audit kas", value: "Lihat transaksi", href: "/finance/audit", visible: can("view_fees") && !isTeacherOnly },
+  ].filter((item) => item.visible);
 
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

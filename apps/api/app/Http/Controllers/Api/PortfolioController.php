@@ -42,11 +42,17 @@ class PortfolioController extends Controller
             'areaId' => ['nullable', 'exists:montessori_areas,id'],
             'workDate' => ['required', 'date', 'before_or_equal:today'],
             'isFeatured' => ['boolean'],
-            'photos.*' => ['nullable', 'file', 'max:5120'],
+            'photos.*' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'photoUrls' => ['nullable', 'array'],
         ]);
 
         $student = Student::with('classes')->findOrFail($data['studentId']);
+        $classId = $data['classId'] ?? $student->active_class?->id;
+        if (! $classId) {
+            return ApiResponse::error('Data kelas murid belum tersedia.', [
+                'studentId' => ['Murid belum masuk kelas aktif.'],
+            ], 422);
+        }
         $photoUrls = $data['photoUrls'] ?? [];
         foreach ($request->file('photos', []) as $file) {
             $photoUrls[] = $this->storePublicFile($file, 'portfolios/'.$student->id);
@@ -54,7 +60,7 @@ class PortfolioController extends Controller
 
         $portfolio = StudentPortfolio::create([
             'student_id' => $student->id,
-            'class_id' => $data['classId'] ?? $student->active_class?->id,
+            'class_id' => $classId,
             'uploaded_by' => $request->user()->id,
             'title' => $data['title'],
             'description' => $data['description'] ?? null,
@@ -80,7 +86,7 @@ class PortfolioController extends Controller
             'areaId' => ['nullable', 'exists:montessori_areas,id'],
             'workDate' => ['required', 'date', 'before_or_equal:today'],
             'isFeatured' => ['boolean'],
-            'photos.*' => ['nullable', 'file', 'max:5120'],
+            'photos.*' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'photoUrls' => ['nullable', 'array'],
         ]);
 

@@ -22,6 +22,7 @@ class AiChatController extends Controller
             'message' => ['required', 'string', 'max:2000'],
         ]);
         $user = $request->user();
+        $this->purgeOldHistories($user);
 
         if ($user->hasRole('orang_tua')) {
             abort_unless(! empty($data['studentId']), 422, 'Data anak belum tersedia untuk room AI.');
@@ -55,6 +56,8 @@ class AiChatController extends Controller
     public function myHistory(Request $request, AiQuotaService $quota)
     {
         $user = $request->user();
+        $this->purgeOldHistories($user);
+        $today = now()->toDateString();
 
         if ($user->hasRole('orang_tua')) {
             $studentId = $request->integer('studentId') ?: $user->children()->value('students.id');
@@ -68,7 +71,7 @@ class AiChatController extends Controller
             return ApiResponse::success([
                 'room' => 'student',
                 'student' => $student,
-                'messages' => AiChatHistory::where('user_id', $user->id)->where('student_id', $studentId)->oldest()->get(),
+                'messages' => AiChatHistory::where('user_id', $user->id)->where('student_id', $studentId)->whereDate('created_at', $today)->oldest()->get(),
                 'quota' => $this->quotaPayload($user, $quota),
             ], 'Riwayat chat berhasil diambil.');
         }
@@ -78,7 +81,7 @@ class AiChatController extends Controller
         return ApiResponse::success([
             'room' => 'manager',
             'student' => null,
-            'messages' => AiManagerChatHistory::where('user_id', $user->id)->oldest()->get(),
+            'messages' => AiManagerChatHistory::where('user_id', $user->id)->whereDate('created_at', $today)->oldest()->get(),
             'quota' => $this->quotaPayload($user, $quota),
         ], 'Riwayat chat berhasil diambil.');
     }
@@ -105,12 +108,13 @@ class AiChatController extends Controller
 
     public function history(Request $request, Student $student)
     {
+        $this->purgeOldHistories($request->user());
         if ($request->user()->hasRole('orang_tua')) {
             abort_unless($request->user()->children()->where('students.id', $student->id)->exists(), 403);
         }
 
         return ApiResponse::success(
-            AiChatHistory::where('user_id', $request->user()->id)->where('student_id', $student->id)->oldest()->get(),
+            AiChatHistory::where('user_id', $request->user()->id)->where('student_id', $student->id)->whereDate('created_at', now()->toDateString())->oldest()->get(),
             'Riwayat chat berhasil diambil.',
         );
     }
@@ -124,6 +128,7 @@ class AiChatController extends Controller
 
     public function histories(Request $request)
     {
+        $this->purgeOldHistories();
         $query = AiChatHistory::with(['user:id,name,email', 'student:id,full_name,nickname'])
             ->whereHas('user.roles', fn ($roleQuery) => $roleQuery->where('name', 'orang_tua'))
             ->latest('id');
@@ -145,6 +150,7 @@ class AiChatController extends Controller
 
     public function usage(Request $request, AiQuotaService $quota)
     {
+        $this->purgeOldHistories();
         $today = $request->date('date')?->toDateString() ?? now()->toDateString();
         $currentQuota = $quota->quotaFor($request->user());
         $users = User::query()
@@ -210,5 +216,20 @@ class AiChatController extends Controller
             'tokens_per_minute_limit' => $quotaData['tokens_per_minute_limit'],
             'requests_today' => $usage['requests_today'],
         ];
+    }
+
+    private function purgeOldHistories(?User $user = null): void
+    {
+        $today = now()->toDateString();
+
+        AiChatHistory::query()
+            ->when($user, fn ($query) => $query->where('user_id', $user->id))
+            ->whereDate('created_at', '<', $today)
+            ->delete();
+
+        AiManagerChatHistory::query()
+            ->when($user, fn ($query) => $query->where('user_id', $user->id))
+            ->whereDate('created_at', '<', $today)
+            ->delete();
     }
 }

@@ -15,15 +15,22 @@ class SchoolBankAccountSeeder extends Seeder
             ['account_holder' => 'Madani Montessori', 'is_active' => true],
         );
 
-        FeeType::updateOrCreate(
-            ['name' => 'SPP Bulanan'],
-            [
-                'amount' => 500000,
-                'due_day' => 10,
-                'applicable_levels' => ['KB', 'TK A', 'TK B', 'TK C', 'TKA', 'TKB', 'TKC'],
-                'is_recurring' => true,
-                'is_active' => true,
-            ],
-        );
+        foreach ([
+            ['SPP Reguler', ['regular'], ['KB', 'TK A', 'TK B', 'TK C']],
+            ['SPP Half-day', ['half_day'], ['KB', 'TK A', 'TK B', 'TK C']],
+            ['SPP Full-day', ['full_day'], ['TK B', 'TK C']],
+        ] as [$name, $programs, $levels]) {
+            FeeType::updateOrCreate(
+                ['name' => $name],
+                [
+                    'amount' => 500000,
+                    'due_day' => 10,
+                    'applicable_levels' => $levels,
+                    'applicable_programs' => $programs,
+                    'is_recurring' => true,
+                    'is_active' => true,
+                ],
+            );
+        }
     }
 }

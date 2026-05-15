@@ -1,7 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch, getToken } from "@/lib/api";
+import {
+  AUTH_CHANGED_EVENT,
+  apiFetch,
+  getAuthSessionKey,
+  getToken,
+} from "@/lib/api";
 
 export type CurrentUser = {
   id: number;
@@ -16,10 +22,22 @@ export type CurrentUser = {
   permissions: string[];
 };
 
+export function authMeQueryKey(sessionKey = getAuthSessionKey()) {
+  return ["auth", sessionKey, "me"] as const;
+}
+
 export function usePermissions() {
-  const hasToken = typeof window !== "undefined" && Boolean(getToken());
+  const [sessionKey, setSessionKey] = useState(() => getAuthSessionKey());
+
+  useEffect(() => {
+    const syncSession = () => setSessionKey(getAuthSessionKey());
+    window.addEventListener(AUTH_CHANGED_EVENT, syncSession);
+    return () => window.removeEventListener(AUTH_CHANGED_EVENT, syncSession);
+  }, []);
+
+  const hasToken = sessionKey !== "guest" && Boolean(getToken());
   const query = useQuery({
-    queryKey: ["auth", "me"],
+    queryKey: authMeQueryKey(sessionKey),
     queryFn: () => apiFetch<CurrentUser>("/auth/me"),
     enabled: hasToken,
     retry: false,
@@ -37,6 +55,7 @@ export function usePermissions() {
     error: query.error,
     isError: query.isError,
     isLoading: query.isLoading,
+    sessionKey,
     can: (permission: string) => permissions.includes(permission),
     hasRole: (role: string) => roles.includes(role),
   };

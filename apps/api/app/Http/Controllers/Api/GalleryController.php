@@ -37,7 +37,7 @@ class GalleryController extends Controller
             'description' => ['nullable', 'string'],
             'eventDate' => ['required', 'date', 'before_or_equal:today'],
             'isPublished' => ['boolean'],
-            'photos.*' => ['nullable', 'file', 'max:5120'],
+            'photos.*' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'photoUrls' => ['nullable', 'array'],
         ]);
 
@@ -71,7 +71,7 @@ class GalleryController extends Controller
             'description' => ['nullable', 'string'],
             'eventDate' => ['required', 'date', 'before_or_equal:today'],
             'isPublished' => ['boolean'],
-            'photos.*' => ['nullable', 'file', 'max:5120'],
+            'photos.*' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'photoUrls' => ['nullable', 'array'],
         ]);
 

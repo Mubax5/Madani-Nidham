@@ -4,12 +4,12 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Download, Eye, RefreshCw, Wallet } from "lucide-react";
+import { Check, Download, Eye, RefreshCw, Search, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { CompactStatCard } from "@/components/finance/compact-stat-card";
 import { usePermissions } from "@/lib/use-permissions";
-import { Badge, Breadcrumbs, Button, Empty, FileInput, Input, Modal, PageHeader, Panel, SearchBox, Select, Textarea, appendFormValue, buildQuery, compactMoney, formatDate, listFrom, money, monthName, useItem, useList, type BankAccount, type StudentFee } from "./phase-shared";
+import { Badge, Breadcrumbs, Button, Empty, FileInput, Input, Modal, PageHeader, Panel, Select, Textarea, appendFormValue, buildQuery, compactMoney, formatDate, listFrom, money, monthName, useItem, useList, type BankAccount, type StudentFee } from "./phase-shared";
 
 export function FeesPage({ initialGenerateOpen = false }: { initialGenerateOpen?: boolean } = {}) {
   const { can } = usePermissions();
@@ -138,7 +138,7 @@ export function FeesPage({ initialGenerateOpen = false }: { initialGenerateOpen?
         <CompactStatCard label="Overdue" value={compactMoney(summary?.overdue)} description={`${summary?.overdueCount ?? 0} invoice lewat tempo`} borderColor="rose" />
       </section>
 
-      <Panel title="Daftar tagihan" action={<div className="flex flex-wrap gap-2"><SearchBox value={search} onChange={setSearch} placeholder="Cari murid, invoice, tagihan" /><Select label="Status" value={status} onChange={setStatus}><option value="">Semua</option><option value="unpaid">Belum bayar</option><option value="partial">Partial</option><option value="paid">Lunas</option></Select><Select label="Aging" value={aging} onChange={setAging}><option value="">Semua aging</option><option value="overdue">Overdue</option><option value="due_soon">Jatuh tempo 7 hari</option></Select></div>}>
+      <Panel title="Daftar tagihan" action={<FeeFilters search={search} onSearch={setSearch} status={status} onStatus={setStatus} aging={aging} onAging={setAging} />}>
         <div className="grid gap-3">
           {fees.map((fee) => {
             const progress = fee.totalBilled > 0 ? Math.min(100, Math.round((fee.paidAmount / fee.totalBilled) * 100)) : 0;
@@ -194,6 +194,54 @@ export function FeesPage({ initialGenerateOpen = false }: { initialGenerateOpen?
       <Modal open={Boolean(detailFee)} title="Detail invoice" description={detailFee?.invoiceNumber ?? `Invoice #${detailFee?.id ?? ""}`} onClose={() => setDetailFee(null)}>
         {detailFee ? <FeeDetailContent fee={detailFee} /> : null}
       </Modal>
+    </div>
+  );
+}
+
+function FeeFilters({
+  search,
+  onSearch,
+  status,
+  onStatus,
+  aging,
+  onAging,
+}: {
+  search: string;
+  onSearch: (value: string) => void;
+  status: string;
+  onStatus: (value: string) => void;
+  aging: string;
+  onAging: (value: string) => void;
+}) {
+  return (
+    <div className="grid w-full gap-2 sm:grid-cols-[minmax(220px,1fr)_150px_170px] lg:w-[650px]">
+      <label className="relative grid gap-1 text-xs font-bold text-[#0a1f5c]">
+        <span className="sr-only">Cari tagihan</span>
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b] sm:top-[18px]" />
+        <input
+          className="madani-input h-9 pl-9"
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder="Cari murid, invoice, tagihan"
+        />
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-[#0a1f5c]">
+        Status
+        <select className="madani-input h-9" value={status} onChange={(event) => onStatus(event.target.value)}>
+          <option value="">Semua</option>
+          <option value="unpaid">Belum bayar</option>
+          <option value="partial">Partial</option>
+          <option value="paid">Lunas</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-[#0a1f5c]">
+        Aging
+        <select className="madani-input h-9" value={aging} onChange={(event) => onAging(event.target.value)}>
+          <option value="">Semua aging</option>
+          <option value="overdue">Overdue</option>
+          <option value="due_soon">Jatuh tempo 7 hari</option>
+        </select>
+      </label>
     </div>
   );
 }

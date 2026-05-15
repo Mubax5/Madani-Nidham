@@ -22,13 +22,20 @@ class FeeService
         foreach ($students as $student) {
             $level = $student->active_class?->level;
             $levels = array_filter([$level, str_replace(' ', '', (string) $level)]);
+            $programType = $student->program_type ?? $student->active_class?->pivot?->program_type ?? 'regular';
             $feeTypes = FeeType::where('is_active', true)
                 ->where('is_recurring', true)
                 ->where(function ($query) use ($levels) {
                     $query->whereNull('applicable_levels');
+                    $query->orWhereJsonLength('applicable_levels', 0);
                     foreach ($levels as $level) {
                         $query->orWhereJsonContains('applicable_levels', $level);
                     }
+                })
+                ->where(function ($query) use ($programType) {
+                    $query->whereNull('applicable_programs')
+                        ->orWhereJsonLength('applicable_programs', 0)
+                        ->orWhereJsonContains('applicable_programs', $programType);
                 })
                 ->get();
 

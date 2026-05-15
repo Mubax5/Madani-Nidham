@@ -108,7 +108,6 @@ class RolesAndPermissionsV2Seeder extends Seeder
             'update_student_milestones', 'view_milestones',
             'update_student_hafalan', 'view_hafalan',
             'manage_portfolios', 'view_portfolios',
-            'manage_galleries', 'view_galleries',
         ]);
 
         Role::findOrCreate('orang_tua', 'web')->syncPermissions([

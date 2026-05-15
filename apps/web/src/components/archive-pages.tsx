@@ -16,7 +16,6 @@ import {
   type MilestoneStatus,
   type MontessoriArea,
   type MontessoriMilestone,
-  type SchoolClass,
   type Student,
 } from "@/components/fast-pages/workspace-shared";
 
@@ -132,18 +131,15 @@ function matchDate(value?: string | null, from = "", to = "") {
 export function JournalsArchivePage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [classId, setClassId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState(todayInput());
   const [editing, setEditing] = useState<Journal | null>(null);
   const [form, setForm] = useState({ content: "", mood: "happy", isPublished: true });
-  const classes = listFrom(useQuery({ queryKey: ["classes", "journal-archive"], queryFn: () => apiFetch<SchoolClass[]>("/classes?perPage=100") }).data);
   const journalsQuery = useQuery({ queryKey: ["journals", "archive"], queryFn: () => apiFetch<Journal[]>("/journals?perPage=100"), retry: false });
   const journals = listFrom(journalsQuery.data);
 
   const filtered = journals.filter((journal) => {
     const keyword = search.trim().toLowerCase();
-    if (classId && String(journal.class?.id) !== classId) return false;
     if (!matchDate(journal.date, from, to)) return false;
     if (!keyword) return true;
     return [journal.student?.fullName ?? "", journal.class?.name ?? "", journal.content, statusLabel(journal.mood), formatDate(journal.date)]
@@ -172,12 +168,8 @@ export function JournalsArchivePage() {
       <Panel
         title={`${filtered.length} jurnal tampil`}
         action={
-          <div className="grid gap-2 lg:grid-cols-[260px_180px_320px]">
+          <div className="grid gap-2 lg:grid-cols-[320px_320px]">
             <SearchBox value={search} onChange={setSearch} placeholder="Cari murid, kelas, catatan" />
-            <select className="madani-input" value={classId} onChange={(event) => setClassId(event.target.value)}>
-              <option value="">Semua kelas</option>
-              {classes.map((item) => <option key={item.id} value={item.id}>{item.name} / {item.level}</option>)}
-            </select>
             <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
           </div>
         }

@@ -43,7 +43,7 @@ class AbsenceRequestController extends Controller
             'date' => ['required', 'date', 'before_or_equal:today'],
             'type' => ['required', Rule::in(['sakit', 'izin'])],
             'reason' => ['required', 'string'],
-            'document' => ['nullable', 'file', 'max:5120'],
+            'document' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf,doc,docx', 'max:5120'],
             'documentUrl' => ['nullable', 'url'],
         ]);
 
@@ -124,6 +124,21 @@ class AbsenceRequestController extends Controller
         }
 
         return ApiResponse::success($absenceRequest->fresh(['student', 'reviewer']), 'Permohonan izin berhasil direview.');
+    }
+
+    public function destroy(AbsenceRequest $absenceRequest)
+    {
+        if ($absenceRequest->status === 'approved') {
+            Attendance::query()
+                ->where('student_id', $absenceRequest->student_id)
+                ->whereDate('date', $absenceRequest->date->toDateString())
+                ->where('status', $absenceRequest->type)
+                ->delete();
+        }
+
+        $absenceRequest->delete();
+
+        return ApiResponse::success(null, 'Permohonan izin berhasil dihapus.');
     }
 
     public function my(Request $request)

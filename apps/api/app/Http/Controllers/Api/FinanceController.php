@@ -591,5 +591,6 @@ class FinanceController extends Controller
         Cache::forget('dashboard:v2:'.now()->toDateString());
         Cache::forget('dashboard:v3:'.now()->toDateString());
         Cache::forget('dashboard:v4:'.now()->toDateString());
+        User::query()->pluck('id')->each(fn ($id) => Cache::forget('dashboard:v6:'.now()->toDateString().':'.$id));
     }
 }

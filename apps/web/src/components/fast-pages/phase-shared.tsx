@@ -78,7 +78,7 @@ export type Article = {
   publishedAt?: string | null;
 };
 export type BankAccount = { id: number; bankName: string; accountNumber: string; accountHolder: string; isActive: boolean };
-export type FeeType = { id: number; name: string; amount: number; dueDay: number; applicableLevels?: string[]; isRecurring: boolean; isActive: boolean };
+export type FeeType = { id: number; name: string; amount: number; dueDay: number; applicableLevels?: string[]; applicablePrograms?: string[]; isRecurring: boolean; isActive: boolean };
 export type FeePayment = {
   id: number;
   receivedAmount: number;
@@ -276,9 +276,9 @@ export function Breadcrumbs({ items }: { items: Array<{ label: string; href?: st
 export function Panel({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white">
-      <div className="flex min-h-11 items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
-        <h2 className="text-[13px] font-bold text-[#0a1f5c]">{title}</h2>
-        {action}
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
+        <h2 className="shrink-0 text-[13px] font-bold text-[#0a1f5c]">{title}</h2>
+        {action ? <div className="min-w-0">{action}</div> : null}
       </div>
       <div className="p-4">{children}</div>
     </section>

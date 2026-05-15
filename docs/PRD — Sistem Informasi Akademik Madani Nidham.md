@@ -13,7 +13,7 @@
 
 Madani Nidham adalah platform terpadu untuk mengelola operasional sekolah dari pendaftaran murid baru sampai pemantauan perkembangan anak, komunikasi orang tua, raport, keuangan, dan dukungan AI berbasis data sistem.
 
-Website dashboard dipakai oleh super admin, kepala sekolah, admin, dan guru. Mobile app Flutter dipakai oleh orang tua dan guru agar aktivitas harian dapat dilihat dan dicatat dari ponsel.
+Website dashboard dipakai oleh super admin, kepala sekolah, admin, dan guru. Mobile app Flutter saat ini difokuskan untuk orang tua; akses guru mobile dicatat sebagai pengembangan berikutnya, sementara input harian guru tetap lewat dashboard.
 
 Tujuan utama produk:
 
@@ -58,13 +58,13 @@ Website dashboard harus menjadi pusat kerja harian internal sekolah:
 
 ## 3.2 Sasaran Mobile App Flutter
 
-Mobile app harus memudahkan akses cepat:
+Mobile app harus memudahkan akses cepat untuk orang tua:
 
 * orang tua melihat data anak,
 * orang tua mengirim izin atau sakit,
 * orang tua melihat tagihan, bukti bayar, pengumuman, agenda, galeri, dan raport,
-* guru bisa mengisi data harian dari ponsel,
-* notifikasi penting masuk langsung ke perangkat.
+* notifikasi penting masuk langsung ke perangkat,
+* rencana akses guru mobile disiapkan tanpa membuka data lintas kelas atau keluarga.
 
 ## 3.3 Sasaran Backend API
 
@@ -273,7 +273,6 @@ Kebutuhan:
 * Artikel parenting.
 * AI anak.
 * Push notification.
-* Form guru untuk input harian.
 
 ## 6.3 Tidak Termasuk untuk Versi Awal
 
@@ -284,6 +283,7 @@ Kebutuhan:
 * Sinkronisasi offline penuh.
 * Video learning.
 * Chat realtime antar user.
+* Form guru mobile untuk input harian.
 * Program tambahan privat di luar sistem utama.
 * Integrasi WhatsApp Business resmi.
 * Tanda tangan digital tersertifikasi production.
@@ -322,7 +322,7 @@ flowchart LR
 Komponen utama:
 
 * Website dashboard untuk internal sekolah.
-* Mobile app Flutter untuk orang tua dan guru.
+* Mobile app Flutter untuk orang tua.
 * API backend sebagai pusat auth, validasi, dan data.
 * Database sebagai sumber kebenaran.
 * Storage untuk foto, bukti bayar, dokumen, dan PDF.
@@ -747,6 +747,13 @@ Search harus bisa mencari:
 
 Judul halaman SPP tidak boleh hilang.
 
+Aturan program untuk tarif SPP:
+
+* Reguler berlaku untuk semua level kelas.
+* Half-day berlaku untuk semua level kelas.
+* Full-day hanya berlaku untuk TK B dan TK C.
+* Level berlaku di CRUD tarif harus memakai level/program dari data murid dan kelas aktif, bukan dropdown kelas manual yang terpisah.
+
 ---
 
 # 15. Modul Gaji Guru
@@ -823,6 +830,7 @@ Aturan:
 * `registrations.program_type` menyimpan pilihan program dari PPDB.
 * UI tambah/edit murid wajib menampilkan pilihan program.
 * Program harus ikut muncul di detail murid dan API mobile.
+* Tarif SPP membaca program dan level dari data murid aktif.
 
 ---
 
@@ -922,6 +930,8 @@ Kebutuhan:
 
 Aturan wajib:
 
+* AI hanya boleh menjawab hal yang terkait sistem Madani Nidham dan data sekolah yang tersedia.
+* Pertanyaan luar konteks harus ditolak walaupun diawali sapaan atau dicampur dengan konteks sekolah.
 * AI harus memakai konteks data sistem sebelum menjawab.
 * Jika data tidak tersedia, AI harus bilang data belum tersedia.
 * AI tidak boleh mengarang angka pemasukan, saldo, tunggakan, absensi, atau progres.
@@ -953,14 +963,13 @@ Aturan kuota:
 
 ## 20.1 Prinsip Mobile
 
-Mobile app harus cepat, ringkas, dan cocok dipakai orang tua maupun guru.
+Mobile app harus cepat, ringkas, dan pada implementasi saat ini cocok dipakai orang tua.
 
 Prinsip:
 
 * satu anak dapat dipilih dari home,
 * data terbaru tampil dulu,
 * notifikasi masuk ke halaman terkait,
-* form guru harus singkat,
 * status pembayaran mudah dibaca,
 * data sensitif tidak tampil untuk user yang tidak berhak.
 
@@ -985,9 +994,9 @@ Menu:
 * AI Anak,
 * Profil.
 
-## 20.3 Menu Guru
+## 20.3 Rencana Menu Guru
 
-Menu:
+Menu guru belum menjadi fokus implementasi Flutter awal. Saat modul ini dibuka, menu yang disiapkan:
 
 * Beranda Guru,
 * Kelas Saya,
@@ -1015,17 +1024,34 @@ Prioritas tahap awal:
 8. Tagihan.
 9. Pengumuman.
 10. Agenda.
-11. Notifikasi.
+11. Upload bukti bayar.
+12. Izin/sakit.
+13. Notifikasi.
 
 Tahap berikutnya:
 
 1. Portofolio.
 2. Galeri.
 3. Raport PDF.
-4. Upload bukti bayar.
-5. Izin/sakit.
-6. AI anak.
-7. Form guru.
+4. AI anak.
+5. Akses guru mobile.
+
+## 20.5 Implementasi Mobile Orang Tua Saat Ini
+
+Implementasi Flutter awal difokuskan untuk role orang tua.
+
+Sudah tersedia:
+
+* login email/password untuk akun `orang_tua`,
+* session token mobile disimpan di secure storage,
+* beranda orang tua dengan ringkasan anak, absensi hari ini, izin/sakit, tagihan, jurnal, pengumuman, agenda, dan notifikasi,
+* data anak, kelas aktif, program TK, biodata, raport publish, dan portofolio,
+* riwayat absensi, jurnal, Montessori, hafalan, doa, serta form izin/sakit,
+* tagihan SPP dengan upload bukti pembayaran,
+* pengumuman, agenda, galeri kelas, artikel parenting, dan notifikasi,
+* AI Anak berbasis data anak yang terhubung ke akun orang tua.
+
+Backend menyediakan endpoint `mobile/parent/*` agar data orang tua selalu dibatasi oleh relasi `student_parents`.
 
 ---
 
@@ -1042,7 +1068,7 @@ Format sukses:
 ```json
 {
   "success": true,
-  "message": "Data berhasil diambil",
+  "message": "Data berhasil diambil.",
   "data": {},
   "meta": {}
 }
@@ -1053,7 +1079,7 @@ Format error:
 ```json
 {
   "success": false,
-  "message": "Pesan error",
+  "message": "Pesan aman untuk pengguna.",
   "errors": {}
 }
 ```
@@ -1062,6 +1088,7 @@ Kebutuhan API:
 
 * auth token memakai Sanctum,
 * response konsisten,
+* response error production tidak menampilkan exception, SQL, stack trace, path server, atau output sistem,
 * pagination untuk list besar,
 * validasi request di backend,
 * upload file memakai storage yang aman,
@@ -1089,9 +1116,9 @@ Tabel utama:
 * `montessori_milestones`
 * `student_milestones`
 * `hafalan_surahs`
-* `student_hafalans`
-* `doa_dailies`
-* `student_doas`
+* `student_hafalan`
+* `doa_daily`
+* `student_doa`
 * `student_portfolios`
 * `class_galleries`
 * `reports`
@@ -1238,6 +1265,8 @@ Validasi global:
 * nominal uang tidak boleh negatif,
 * tanggal penting memakai timezone Asia/Jakarta,
 * file upload dibatasi jenis dan ukuran,
+* nama file upload memakai nama aman/acak dan tidak mempercayai nama asli user,
+* file upload dokumen dan foto memakai folder modul yang jelas serta akses sesuai permission,
 * user hanya bisa mengakses data sesuai permission.
 
 Validasi tanggal maksimal hari ini berlaku untuk:
@@ -1266,12 +1295,16 @@ Validasi keuangan:
 Prinsip UI:
 
 * dashboard padat tetapi tetap mudah dibaca,
+* semua tampilan list dibuat compact dengan tinggi baris stabil,
+* radius komponen kecil dan konsisten,
 * card hanya dipakai untuk unit informasi yang jelas,
 * chart tidak menyisakan ruang kosong berlebihan,
-* tab filter compact,
+* filter memakai tombol compact yang konsisten antar modul,
 * judul halaman tidak hilang,
 * search terlihat di halaman list,
 * subpage dibuka dari menu inti masing-masing,
+* perpindahan halaman setelah warm cache ditargetkan di bawah 100 ms,
+* cache data wajib berbasis session agar data akun lama tidak kebawa setelah ganti akun,
 * tampilan mobile browser tetap rapi.
 
 Halaman wajib punya search:
@@ -1359,12 +1392,15 @@ Kebutuhan:
 * API key hanya lewat environment variable,
 * token auth disimpan aman di mobile,
 * token auth tidak memiliki expiry otomatis, tetapi dicabut saat logout dan saat password diganti,
+* cache frontend dibersihkan saat login, logout, dan response 401,
+* data cache TanStack Query memakai session key per token/user,
 * login Google wajib memakai akun Google dengan `email_verified=true`,
 * login Google hanya boleh untuk user yang sudah ada dan sudah link Google dari profil,
 * role dan permission dicek backend,
 * orang tua hanya melihat anak sendiri,
 * data keuangan hanya untuk role berizin,
-* upload file harus divalidasi,
+* upload file harus divalidasi MIME, ekstensi, ukuran, dan permission akses,
+* error production memakai pesan user-friendly tanpa stack trace, SQL, path server, atau output sistem,
 * akun demo tidak boleh dipakai production,
 * seeder demo tidak dijalankan di production.
 
@@ -1425,9 +1461,13 @@ Solusi:
 Produk diterima bila:
 
 * user bisa login sesuai role,
+* pindah menu utama terasa instan setelah route dan data hangat,
+* data akun lama tidak muncul setelah login dengan akun lain,
 * dashboard menampilkan data berguna tanpa ruang bawah kosong berlebihan,
 * Jurnal, Montessori, dan Hafalan punya label hari ini,
 * arsip Jurnal, Montessori, dan Hafalan bisa search, filter, edit,
+* daftar murid Montessori, Hafalan, Portofolio, dan Raport punya tinggi baris/card stabil,
+* Montessori menampilkan carousel siswa satu baris, bukan scroll vertikal panjang,
 * SPP punya search,
 * Gaji Guru punya search dan judul tetap ada,
 * Uang Pendaftaran punya judul jelas,
@@ -1446,9 +1486,11 @@ Produk diterima bila:
 * endpoint utama berjalan,
 * permission backend aktif,
 * response standar konsisten,
+* error production tidak membocorkan detail sistem,
 * `updated_at` berubah saat data diedit,
 * Pusat Keuangan menggabungkan semua sumber transaksi,
 * AI memakai data sistem untuk jawaban angka,
+* AI menolak pertanyaan di luar konteks meski diawali sapaan,
 * test backend pass.
 
 ## 32.3 Mobile App Flutter
@@ -1458,8 +1500,7 @@ Produk diterima bila:
 * orang tua bisa login,
 * orang tua melihat anak sendiri,
 * orang tua melihat absensi, jurnal, Montessori, hafalan, tagihan, pengumuman, dan agenda,
-* guru bisa login,
-* guru bisa melihat kelas dan mengisi data prioritas,
+* guru mobile belum wajib untuk rilis awal,
 * push notification siap memakai token FCM,
 * mobile tidak menampilkan data lintas keluarga.
 

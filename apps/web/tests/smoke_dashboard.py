@@ -1,6 +1,7 @@
 from pathlib import Path
+import re
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 
 BASE_URL = "http://127.0.0.1:3000"
@@ -32,11 +33,14 @@ def main():
         page.on("requestfailed", lambda request: request_failures.append(f"{request.url}: {request.failure}"))
 
         page.goto(f"{BASE_URL}/login", wait_until="domcontentloaded")
-        page.get_by_label("Email").wait_for(timeout=30000)
-        page.get_by_label("Email").fill("admin@madani-nidham.local")
-        page.get_by_label("Password").fill("password")
-        page.get_by_role("button", name="Masuk").click()
-        page.wait_for_url("**/dashboard", wait_until="commit", timeout=30000)
+        page.wait_for_load_state("networkidle")
+        page.locator('input[type="email"]').wait_for(timeout=30000)
+        page.locator('input[type="email"]').fill("admin@madani-nidham.local")
+        page.locator('input[type="password"]').fill("password")
+        submit = page.get_by_role("button", name="Masuk", exact=True)
+        expect(submit).to_be_enabled(timeout=30000)
+        submit.click()
+        expect(page).to_have_url(re.compile(r".*/dashboard"), timeout=30000)
         page.get_by_text("Isi absensi").first.wait_for(timeout=30000)
 
         routes = [

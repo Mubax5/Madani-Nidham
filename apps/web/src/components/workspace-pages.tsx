@@ -2,7 +2,12 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Area,
   Bar,
@@ -233,11 +238,7 @@ type EnrollmentCategory =
   | "not_continuing"
   | "unconfirmed";
 
-type EnrollmentPaymentStatus =
-  | "unpaid"
-  | "partial"
-  | "paid"
-  | "not_applicable";
+type EnrollmentPaymentStatus = "unpaid" | "partial" | "paid" | "not_applicable";
 
 type EnrollmentConfirmationStatus =
   | "pending"
@@ -361,7 +362,13 @@ type DashboardData = {
       pct?: number;
     }>;
     feeCollection: Array<{ month: number; target: number; paid: number }>;
-    financeBreakdown: Array<{ label: string; type: string; target: number; paid: number; outstanding: number }>;
+    financeBreakdown: Array<{
+      label: string;
+      type: string;
+      target: number;
+      paid: number;
+      outstanding: number;
+    }>;
     studentsPerClass: Array<{
       name: string;
       level?: string;
@@ -557,6 +564,10 @@ function classLabel(item?: SchoolClass | null) {
 
 function studentClass(student: Student) {
   return student.classes?.[0]?.name ?? "Belum masuk kelas";
+}
+
+function studentClassId(student?: Student | null) {
+  return student?.classes?.[0]?.id;
 }
 
 function firstParent(student: Student) {
@@ -769,7 +780,7 @@ function StatusBadge({ value }: { value?: string | null }) {
           value === "inactive" ||
           value === "not_continuing"
         ? "bg-rose-50 text-rose-700 border-rose-200"
-      : value === "pending" ||
+        : value === "pending" ||
             value === "under_review" ||
             value === "waitlist" ||
             value === "partial" ||
@@ -1208,7 +1219,7 @@ export function DashboardHome() {
             },
             {
               href: "/journals",
-              label: "Tulis jurnal",
+              label: "Jurnal",
               icon: <NotebookPen className="h-4 w-4" />,
             },
             {
@@ -1403,8 +1414,12 @@ function DashboardAttendanceByClass({
             <span className="text-right">%</span>
           </div>
           {rows.map((row) => {
-            const total = Math.max(row.total, row.hadir + row.izin + row.sakit + row.alfa);
-            const percent = total > 0 ? Math.round((row.hadir / total) * 100) : 0;
+            const total = Math.max(
+              row.total,
+              row.hadir + row.izin + row.sakit + row.alfa,
+            );
+            const percent =
+              total > 0 ? Math.round((row.hadir / total) * 100) : 0;
             const segments = [
               { key: "hadir", value: row.hadir, color: academicColors.hadir },
               { key: "izin", value: row.izin, color: academicColors.izin },
@@ -1514,7 +1529,9 @@ function DashboardAgendaList({
           {items.map((item) => {
             const meta = agendaTypeMeta(item.type);
             const Icon = meta.icon;
-            const badge = item.isAnnouncement ? null : relativeDayBadge(item.date);
+            const badge = item.isAnnouncement
+              ? null
+              : relativeDayBadge(item.date);
 
             return (
               <div
@@ -1544,7 +1561,7 @@ function DashboardAgendaList({
               </div>
             );
           })}
-          {(agendas.length + announcements.length) > 6 ? (
+          {agendas.length + announcements.length > 6 ? (
             <Link
               href="/agendas"
               className="mt-2 inline-flex w-fit items-center gap-1 text-xs font-medium text-[#0a1f5c] hover:underline"
@@ -1588,7 +1605,9 @@ function WeeklyAttendanceTrend({
   });
   const average =
     chartRows.length > 0
-      ? Math.round(chartRows.reduce((sum, row) => sum + row.hadir, 0) / chartRows.length)
+      ? Math.round(
+          chartRows.reduce((sum, row) => sum + row.hadir, 0) / chartRows.length,
+        )
       : 0;
   const yMax = Math.max(totalStudents + 5, 5);
 
@@ -1616,7 +1635,11 @@ function WeeklyAttendanceTrend({
                   <stop offset="100%" stopColor="#ffe4e6" stopOpacity={0.25} />
                 </linearGradient>
               </defs>
-              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid
+                stroke="#e2e8f0"
+                strokeDasharray="3 3"
+                vertical={false}
+              />
               <XAxis
                 dataKey="axisLabel"
                 height={34}
@@ -1699,7 +1722,8 @@ function MontessoriProgressChart({
 }) {
   const chartRows = rows.map((row) => {
     const area = row.area ?? row.name ?? "-";
-    const pct = row.total > 0 ? Number(row.pct ?? (row.mastered / row.total) * 100) : 0;
+    const pct =
+      row.total > 0 ? Number(row.pct ?? (row.mastered / row.total) * 100) : 0;
 
     return {
       ...row,
@@ -1732,41 +1756,52 @@ function MontessoriProgressChart({
             ))}
           </div>
           <div className="hidden h-[180px] w-full sm:block">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <BarChart
-              data={chartRows}
-              layout="vertical"
-              barCategoryGap={8}
-              margin={{ top: 2, right: 36, bottom: 0, left: 4 }}
-            >
-              <XAxis type="number" domain={[0, 100]} hide />
-              <YAxis
-                type="category"
-                dataKey="shortArea"
-                width={88}
-                tick={{ fontSize: 11, fill: "#475569" }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip content={<MontessoriTooltip />} />
-              <Bar dataKey="masteredPct" stackId="progress" radius={[4, 0, 0, 4]}>
-                {chartRows.map((row) => (
-                  <Cell
-                    key={row.area}
-                    fill={montessoriColors[row.area] ?? academicColors.netral}
-                  />
-                ))}
-              </Bar>
-              <Bar
-                dataKey="remainingPct"
-                stackId="progress"
-                fill="#f1f5f9"
-                radius={[0, 4, 4, 0]}
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <BarChart
+                data={chartRows}
+                layout="vertical"
+                barCategoryGap={8}
+                margin={{ top: 2, right: 36, bottom: 0, left: 4 }}
               >
-                <LabelList content={(props) => renderBarEndLabel(props, chartRows[Number(props.index)]?.pctLabel ?? "0%")} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+                <XAxis type="number" domain={[0, 100]} hide />
+                <YAxis
+                  type="category"
+                  dataKey="shortArea"
+                  width={88}
+                  tick={{ fontSize: 11, fill: "#475569" }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip content={<MontessoriTooltip />} />
+                <Bar
+                  dataKey="masteredPct"
+                  stackId="progress"
+                  radius={[4, 0, 0, 4]}
+                >
+                  {chartRows.map((row) => (
+                    <Cell
+                      key={row.area}
+                      fill={montessoriColors[row.area] ?? academicColors.netral}
+                    />
+                  ))}
+                </Bar>
+                <Bar
+                  dataKey="remainingPct"
+                  stackId="progress"
+                  fill="#f1f5f9"
+                  radius={[0, 4, 4, 0]}
+                >
+                  <LabelList
+                    content={(props) =>
+                      renderBarEndLabel(
+                        props,
+                        chartRows[Number(props.index)]?.pctLabel ?? "0%",
+                      )
+                    }
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </>
       ) : (
@@ -1784,7 +1819,11 @@ function ClassCapacityChart({
   rows: NonNullable<DashboardData["analytics"]>["studentsPerClass"];
 }) {
   const chartRows = rows.map((row) => {
-    const capacity = Math.max(row.capacity ?? row.studentsCount, row.studentsCount, 1);
+    const capacity = Math.max(
+      row.capacity ?? row.studentsCount,
+      row.studentsCount,
+      1,
+    );
     const percent = Math.round((row.studentsCount / capacity) * 100);
 
     return {
@@ -1818,39 +1857,48 @@ function ClassCapacityChart({
             ))}
           </div>
           <div className="hidden h-[150px] w-full sm:block">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <BarChart
-              data={chartRows}
-              layout="vertical"
-              barCategoryGap={8}
-              margin={{ top: 0, right: 38, bottom: 0, left: 6 }}
-            >
-              <XAxis type="number" hide domain={[0, "dataMax"]} />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={98}
-                tick={(props) => <ClassCapacityTick {...props} rows={chartRows} />}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip content={<ClassCapacityTooltip />} />
-              <Bar
-                dataKey="studentsCount"
-                stackId="capacity"
-                fill="#3b82f6"
-                radius={[4, 0, 0, 4]}
-              />
-              <Bar
-                dataKey="remainingCapacity"
-                stackId="capacity"
-                fill="#f1f5f9"
-                radius={[0, 4, 4, 0]}
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <BarChart
+                data={chartRows}
+                layout="vertical"
+                barCategoryGap={8}
+                margin={{ top: 0, right: 38, bottom: 0, left: 6 }}
               >
-                <LabelList content={(props) => renderBarEndLabel(props, chartRows[Number(props.index)]?.label ?? "0/0")} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+                <XAxis type="number" hide domain={[0, "dataMax"]} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={98}
+                  tick={(props) => (
+                    <ClassCapacityTick {...props} rows={chartRows} />
+                  )}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip content={<ClassCapacityTooltip />} />
+                <Bar
+                  dataKey="studentsCount"
+                  stackId="capacity"
+                  fill="#3b82f6"
+                  radius={[4, 0, 0, 4]}
+                />
+                <Bar
+                  dataKey="remainingCapacity"
+                  stackId="capacity"
+                  fill="#f1f5f9"
+                  radius={[0, 4, 4, 0]}
+                >
+                  <LabelList
+                    content={(props) =>
+                      renderBarEndLabel(
+                        props,
+                        chartRows[Number(props.index)]?.label ?? "0/0",
+                      )
+                    }
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </>
       ) : (
@@ -1860,15 +1908,12 @@ function ClassCapacityChart({
   );
 }
 
-function FinancialCategoryBreakdown({
-  finance,
-}: {
-  finance?: FinanceSummary;
-}) {
+function FinancialCategoryBreakdown({ finance }: { finance?: FinanceSummary }) {
   const categories = finance?.categories ?? [];
   const incomeRows = categories.filter((item) => item.type === "income");
   const expenseRows = categories.filter((item) => item.type === "expense");
-  const unpaidCount = (finance?.unpaidCount ?? 0) + (finance?.partialCount ?? 0);
+  const unpaidCount =
+    (finance?.unpaidCount ?? 0) + (finance?.partialCount ?? 0);
   const netCash = finance?.netCash ?? 0;
 
   return (
@@ -1880,7 +1925,11 @@ function FinancialCategoryBreakdown({
         <div className="grid gap-3">
           <CashCategoryGroup label="MASUK" rows={incomeRows} type="income" />
           <div className="border-t border-slate-200" />
-          <CashCategoryGroup label="KELUAR (rencana)" rows={expenseRows} type="expense" />
+          <CashCategoryGroup
+            label="KELUAR (rencana)"
+            rows={expenseRows}
+            type="expense"
+          />
           <div className="flex flex-col gap-1 border-t border-slate-200 pt-3 sm:flex-row sm:items-end sm:justify-between">
             <p
               className={`text-sm font-semibold ${
@@ -1891,7 +1940,8 @@ function FinancialCategoryBreakdown({
               {formatMoney(Math.abs(netCash))}
             </p>
             <p className="text-xs text-[#64748b]">
-              {unpaidCount} tagihan belum dibayar · {formatMoney(finance?.outstanding)}
+              {unpaidCount} tagihan belum dibayar ·{" "}
+              {formatMoney(finance?.outstanding)}
             </p>
           </div>
         </div>
@@ -1915,7 +1965,13 @@ function CashCategoryGroup({
     <div className="grid gap-2.5">
       <p className="text-[11px] font-semibold text-[#64748b]">{label}</p>
       {rows.length > 0 ? (
-        rows.map((row) => <CashCategoryRow key={`${row.label}-${row.type}`} row={row} type={type} />)
+        rows.map((row) => (
+          <CashCategoryRow
+            key={`${row.label}-${row.type}`}
+            row={row}
+            type={type}
+          />
+        ))
       ) : (
         <p className="text-xs text-[#64748b]">Belum ada data kategori.</p>
       )}
@@ -1932,7 +1988,8 @@ function CashCategoryRow({
 }) {
   const amount = Math.abs(row.paid);
   const target = Math.max(row.target, 0);
-  const progress = target > 0 ? Math.min(100, Math.round((amount / target) * 100)) : 0;
+  const progress =
+    target > 0 ? Math.min(100, Math.round((amount / target) * 100)) : 0;
   const Icon = financeCategoryIcon(row.label);
   const color = type === "income" ? financeColors.masuk : financeColors.keluar;
   const bgColor = type === "income" ? "#d1fae5" : "#ffe4e6";
@@ -1944,7 +2001,9 @@ function CashCategoryRow({
       </span>
       <div className="min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-xs font-medium text-slate-900">{row.label}</p>
+          <p className="truncate text-xs font-medium text-slate-900">
+            {row.label}
+          </p>
           <p className="shrink-0 text-xs font-medium text-slate-900">
             {formatMoney(amount)}
           </p>
@@ -1959,10 +2018,7 @@ function CashCategoryRow({
           />
         </div>
       </div>
-      <p
-        className="text-right text-xs font-medium"
-        style={{ color }}
-      >
+      <p className="text-right text-xs font-medium" style={{ color }}>
         {progress}% {type === "income" ? "tertagih" : "dibayar"}
       </p>
     </div>
@@ -2050,7 +2106,10 @@ function HafalanDonutChart({
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-[#64748b]">
             {chartRows.map((row) => (
-              <span key={row.status} className="inline-flex items-center gap-1.5">
+              <span
+                key={row.status}
+                className="inline-flex items-center gap-1.5"
+              >
                 <span
                   className="h-2.5 w-2.5 rounded-[2px]"
                   style={{ backgroundColor: hafalanColors[row.status] }}
@@ -2096,13 +2155,6 @@ function ActionItemList({ actionItems }: { actionItems?: ActionItems }) {
       href: "/reports",
       color: "bg-amber-400",
       urgency: 4,
-    },
-    {
-      label: "Jurnal belum diisi hari ini",
-      count: actionItems?.journalsMissingToday ?? 0,
-      href: "/journals",
-      color: "bg-blue-500",
-      urgency: 5,
     },
   ].sort((a, b) => a.urgency - b.urgency);
   const total = items.reduce((sum, item) => sum + item.count, 0);
@@ -2172,7 +2224,9 @@ function ProgressListRow({
     <div className="grid gap-1">
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="inline-flex min-w-0 items-center gap-1.5 font-medium text-slate-800">
-          {showAlert ? <span className="h-1.5 w-1.5 rounded-full bg-rose-500" /> : null}
+          {showAlert ? (
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+          ) : null}
           <span className="truncate">{label}</span>
         </span>
         <span className="shrink-0 font-semibold text-slate-700">{value}</span>
@@ -2180,7 +2234,10 @@ function ProgressListRow({
       <div className="h-2 overflow-hidden rounded-full bg-slate-100">
         <div
           className="h-full rounded-full"
-          style={{ width: `${Math.min(Math.max(percent, 0), 100)}%`, backgroundColor: color }}
+          style={{
+            width: `${Math.min(Math.max(percent, 0), 100)}%`,
+            backgroundColor: color,
+          }}
         />
       </div>
     </div>
@@ -2465,7 +2522,7 @@ function LegacyDashboardHome() {
           },
           {
             href: "/journals",
-            label: "Tulis jurnal",
+            label: "Jurnal",
             icon: <NotebookPen className="h-4 w-4" />,
           },
           {
@@ -3232,7 +3289,14 @@ export function AttendancePage() {
   });
   const filteredAttendance = attendance.filter((item) => {
     const keyword = search.trim().toLowerCase();
-    if (!matchesLevel(studentLevel(item.student ?? ({} as Student)), levelFilter) && !matchesLevel(item.class?.level, levelFilter)) return false;
+    if (
+      !matchesLevel(
+        studentLevel(item.student ?? ({} as Student)),
+        levelFilter,
+      ) &&
+      !matchesLevel(item.class?.level, levelFilter)
+    )
+      return false;
     if (!keyword) return true;
     return [
       item.student?.fullName ?? "",
@@ -3398,7 +3462,8 @@ export function AttendancePage() {
                             {student.fullName}
                           </p>
                           <p className="text-xs text-[#64748b]">
-                            {student.nis ?? "NIS belum diisi"} / {studentClass(student)}
+                            {student.nis ?? "NIS belum diisi"} /{" "}
+                            {studentClass(student)}
                           </p>
                         </td>
                         <td className="h-12 px-3">
@@ -3485,8 +3550,14 @@ export function AttendancePage() {
                 header: "Murid",
                 render: (item) => (
                   <div>
-                    <p className="font-semibold text-[#0a1f5c]">{item.student?.fullName ?? "-"}</p>
-                    <p className="text-xs text-[#64748b]">{item.class?.name ?? item.student?.classes?.[0]?.name ?? "-"}</p>
+                    <p className="font-semibold text-[#0a1f5c]">
+                      {item.student?.fullName ?? "-"}
+                    </p>
+                    <p className="text-xs text-[#64748b]">
+                      {item.class?.name ??
+                        item.student?.classes?.[0]?.name ??
+                        "-"}
+                    </p>
                   </div>
                 ),
               },
@@ -3529,14 +3600,12 @@ export function AttendancePage() {
 
 export function JournalsPage() {
   const queryClient = useQueryClient();
-  const classes = listFrom(
-    useList<SchoolClass>(["classes", "journal"], "/classes?perPage=100").data,
+  const students = listFrom(
+    useList<Student>(
+      ["students", "journal"],
+      "/students?status=active&perPage=100",
+    ).data,
   );
-  const [levelFilter, setLevelFilter] = useState("");
-  const journalClasses = classes.filter((item) =>
-    matchesLevel(item.level, levelFilter),
-  );
-  const [classId, setClassId] = useState("");
   const [studentId, setStudentId] = useState("");
   const [search, setSearch] = useState("");
   const [date, setDate] = useState(todayInput());
@@ -3546,50 +3615,48 @@ export function JournalsPage() {
   const [photos, setPhotos] = useState<File[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editingJournalId, setEditingJournalId] = useState<number | null>(null);
-  const studentsQuery = useList<Student>(
-    ["class-students", "journal", classId],
-    `/classes/${classId}/students`,
-    Boolean(classId),
-  );
   const journalsQuery = useList<Journal>(
-    ["journals", classId, date],
-    buildQuery("/journals", { classId, date, perPage: 30 }),
-    Boolean(classId),
+    ["journals", date],
+    buildQuery("/journals", { date, perPage: 100 }),
   );
-  const students = listFrom(studentsQuery.data);
   const journals = listFrom(journalsQuery.data);
-  const filteredJournals = journals.filter((journal) => {
+  const journalByStudentId = new Map(
+    journals
+      .filter((journal) => journal.student?.id)
+      .map((journal) => [journal.student?.id as number, journal]),
+  );
+  const filteredStudents = students.filter((student) => {
+    const journal = journalByStudentId.get(student.id);
     const keyword = search.trim().toLowerCase();
     if (!keyword) return true;
 
     return [
-      journal.student?.fullName ?? "",
-      journal.class?.name ?? "",
-      journal.content,
-      statusLabel(journal.mood),
+      student.fullName,
+      student.nickname ?? "",
+      student.nis ?? "",
+      studentClass(student),
+      journal?.content ?? "",
+      statusLabel(journal?.mood),
     ]
       .join(" ")
       .toLowerCase()
       .includes(keyword);
   });
+  const selectedStudent =
+    students.find((student) => String(student.id) === studentId) ??
+    filteredStudents[0];
+  const selectedJournal = selectedStudent
+    ? journalByStudentId.get(selectedStudent.id)
+    : undefined;
 
   useEffect(() => {
     if (
-      journalClasses.length > 0 &&
-      (!classId || !journalClasses.some((item) => String(item.id) === classId))
+      filteredStudents.length > 0 &&
+      !filteredStudents.some((student) => String(student.id) === studentId)
     ) {
-      setClassId(String(journalClasses[0].id));
+      setStudentId(String(filteredStudents[0].id));
     }
-  }, [journalClasses, classId]);
-
-  useEffect(() => {
-    if (
-      students.length > 0 &&
-      !students.some((student) => String(student.id) === studentId)
-    ) {
-      setStudentId(String(students[0].id));
-    }
-  }, [studentId, students]);
+  }, [filteredStudents, studentId]);
 
   function resetJournalForm() {
     setEditingJournalId(null);
@@ -3599,14 +3666,23 @@ export function JournalsPage() {
     setPhotos([]);
   }
 
-  function openCreateJournal() {
+  function openCreateJournal(student = selectedStudent) {
+    if (!student) {
+      toast.error("Data murid belum tersedia.");
+      return;
+    }
+    const existingJournal = journalByStudentId.get(student.id);
+    if (existingJournal) {
+      openEditJournal(existingJournal);
+      return;
+    }
     resetJournalForm();
+    setStudentId(String(student.id));
     setFormOpen(true);
   }
 
   function openEditJournal(journal: Journal) {
     setEditingJournalId(journal.id);
-    setClassId(journal.class?.id ? String(journal.class.id) : classId);
     setStudentId(journal.student?.id ? String(journal.student.id) : studentId);
     setDate(journal.date?.slice(0, 10) ?? date);
     setMood(journal.mood ?? "happy");
@@ -3625,9 +3701,14 @@ export function JournalsPage() {
         });
       }
 
+      const formStudent = students.find(
+        (student) => String(student.id) === studentId,
+      );
+      const classId = studentClassId(formStudent);
+      if (!classId) throw new Error("Data kelas murid belum tersedia.");
       const data = new FormData();
       data.set("studentId", studentId);
-      data.set("classId", classId);
+      data.set("classId", String(classId));
       data.set("date", date);
       data.set("mood", mood);
       data.set("content", content);
@@ -3661,33 +3742,15 @@ export function JournalsPage() {
       <PageHeader
         icon={<NotebookPen className="h-5 w-5" />}
         title="Jurnal"
-        description="Tulis catatan perkembangan harian murid untuk orang tua."
+        description="Catatan perkembangan harian murid."
       >
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div className="grid gap-1">
-            <p className="text-xs font-bold uppercase text-[#64748b]">
-              Hari ini, {formatDate(todayInput())}
-            </p>
-            <SearchField
-              value={search}
-              onChange={setSearch}
-              placeholder="Cari murid, catatan, mood"
-            />
-          </div>
-          <div className="grid gap-2 sm:grid-cols-[150px_170px_auto_auto]">
-            <select
-              className="madani-input"
-              value={levelFilter}
-              onChange={(event) => setLevelFilter(event.target.value)}
-              suppressHydrationWarning
-            >
-              <option value="">Semua level</option>
-              {levelOptions.map((level) => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
-              ))}
-            </select>
+          <SearchField
+            value={search}
+            onChange={setSearch}
+            placeholder="Cari murid, catatan, mood"
+          />
+          <div className="grid gap-2 sm:grid-cols-[160px_auto]">
             <input
               className="madani-input"
               type="date"
@@ -3696,14 +3759,6 @@ export function JournalsPage() {
               onChange={(event) => setDate(event.target.value)}
               suppressHydrationWarning
             />
-            <button
-              type="button"
-              onClick={openCreateJournal}
-              className="madani-button bg-[#0a1f5c] text-white"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Tulis jurnal
-            </button>
             <Link
               href="/journals/archive"
               className="madani-button justify-center border border-slate-200 bg-white text-[#0a1f5c]"
@@ -3720,7 +3775,7 @@ export function JournalsPage() {
         description={
           editingJournalId
             ? "Ubah catatan, mood, dan status kirim."
-            : "Satu jurnal per murid per tanggal."
+            : "Kelas otomatis mengikuti data murid."
         }
         onClose={() => {
           setFormOpen(false);
@@ -3734,25 +3789,7 @@ export function JournalsPage() {
           }}
           className="grid gap-3"
         >
-          <CategoryTabs
-            value={levelFilter}
-            onChange={setLevelFilter}
-            items={levelTabs(classes, (item) => item.level)}
-          />
           <div className="grid gap-4 md:grid-cols-2">
-            <SelectField
-              label="Kelas"
-              value={classId}
-              required
-              onChange={setClassId}
-            >
-              <option value="">Pilih kelas</option>
-              {journalClasses.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {classLabel(item)}
-                </option>
-              ))}
-            </SelectField>
             <SelectField
               label="Murid"
               value={studentId}
@@ -3811,82 +3848,151 @@ export function JournalsPage() {
         </form>
       </DrawerForm>
 
-      <Panel
-        title="Jurnal tersimpan"
-        description={`Tanggal ${formatDate(date)}.`}
-      >
-        <CompactTable
-          data={filteredJournals}
-          rowKey={(journal) => journal.id}
-          emptyText={
-            journalsQuery.isLoading
-              ? "Memuat jurnal."
-              : "Belum ada jurnal untuk filter ini."
-          }
-          columns={[
-            {
-              key: "student",
-              header: "Murid",
-              render: (journal) => (
-                <div>
-                  <p className="font-semibold text-[#0a1f5c]">
-                    {journal.student?.fullName ?? "-"}
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+        <Panel
+          title="Semua murid"
+          description={`${filteredStudents.length} murid / ${journals.length} jurnal pada ${formatDate(date)}.`}
+        >
+          <div className="grid max-h-[calc(100dvh-270px)] min-h-[360px] auto-rows-[72px] content-start gap-2 overflow-y-auto pr-1">
+            {filteredStudents.map((student) => {
+              const journal = journalByStudentId.get(student.id);
+              const active = selectedStudent?.id === student.id;
+              return (
+                <button
+                  key={student.id}
+                  type="button"
+                  onClick={() => setStudentId(String(student.id))}
+                  className={`h-[72px] rounded-xl border px-3 text-left transition ${
+                    active
+                      ? "border-[#0a1f5c] bg-[#0a1f5c] text-white"
+                      : journal
+                        ? "border-emerald-200 bg-emerald-50 text-[#0a1f5c] hover:border-[#0a1f5c]/30"
+                        : "border-slate-200 bg-white text-[#0a1f5c] hover:border-[#0a1f5c]/30"
+                  }`}
+                >
+                  <div className="grid h-full grid-cols-[48px_1fr_auto] items-center gap-2.5">
+                    <StudentPhotoFrame
+                      student={student}
+                      size="sm"
+                      active={active}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold">
+                        {student.fullName}
+                      </p>
+                      <p
+                        className={`mt-0.5 truncate text-xs ${active ? "text-white/72" : "text-[#64748b]"}`}
+                      >
+                        {student.nis ?? "NIS belum diisi"} /{" "}
+                        {studentClass(student)}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-1 text-[11px] font-bold ${
+                        active
+                          ? "bg-white/15 text-white"
+                          : journal
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {journal ? "Terisi" : "Belum"}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+            {journalsQuery.isLoading ? (
+              <EmptyState text="Memuat jurnal." />
+            ) : null}
+            {!journalsQuery.isLoading && filteredStudents.length === 0 ? (
+              <EmptyState text="Belum ada murid sesuai pencarian." />
+            ) : null}
+          </div>
+        </Panel>
+
+        <Panel
+          title="Detail jurnal"
+          description={`Tanggal ${formatDate(date)}.`}
+        >
+          {selectedStudent ? (
+            <div className="grid gap-3">
+              <div className="grid grid-cols-[72px_1fr] items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <StudentPhotoFrame student={selectedStudent} size="lg" />
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-[#0a1f5c]">
+                    {selectedStudent.fullName}
                   </p>
-                  <p className="text-xs text-[#64748b]">
-                    {journal.class?.name ?? "-"} / {formatDate(journal.date)}
+                  <p className="truncate text-xs text-[#64748b]">
+                    {selectedStudent.nis ?? "NIS belum diisi"} /{" "}
+                    {studentClass(selectedStudent)}
                   </p>
                 </div>
-              ),
-            },
-            {
-              key: "mood",
-              header: "Mood",
-              render: (journal) => statusLabel(journal.mood),
-            },
-            {
-              key: "content",
-              header: "Catatan",
-              render: (journal) => (
-                <span className="line-clamp-2">{journal.content}</span>
-              ),
-            },
-            {
-              key: "status",
-              header: "Status",
-              render: (journal) => (
-                <StatusBadge
-                  value={journal.isPublished ? "active" : "pending"}
-                />
-              ),
-            },
-            {
-              key: "actions",
-              header: "Aksi",
-              className: "w-[150px]",
-              render: (journal) => (
-                <ActionGroup>
-                  <ActionButton
-                    icon={<Pencil className="h-3.5 w-3.5" />}
-                    onClick={() => openEditJournal(journal)}
+              </div>
+              {selectedJournal ? (
+                <article className="rounded-xl border border-emerald-200 bg-white p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase text-emerald-700">
+                        Jurnal sudah terisi
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-[#0a1f5c]">
+                        {statusLabel(selectedJournal.mood)} /{" "}
+                        {selectedJournal.isPublished ? "Terkirim" : "Draft"}
+                      </p>
+                    </div>
+                    <StatusBadge
+                      value={selectedJournal.isPublished ? "active" : "pending"}
+                    />
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-[#334155]">
+                    {selectedJournal.content}
+                  </p>
+                  <div className="mt-3">
+                    <ActionGroup>
+                      <ActionButton
+                        icon={<Pencil className="h-3.5 w-3.5" />}
+                        onClick={() => openEditJournal(selectedJournal)}
+                      >
+                        Edit
+                      </ActionButton>
+                      <ActionButton
+                        tone="danger"
+                        icon={<Trash2 className="h-3.5 w-3.5" />}
+                        onClick={() => {
+                          if (window.confirm("Hapus jurnal ini?"))
+                            deleteJournal.mutate(selectedJournal.id);
+                        }}
+                      >
+                        Hapus
+                      </ActionButton>
+                    </ActionGroup>
+                  </div>
+                </article>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="text-sm font-bold text-[#0a1f5c]">
+                    Jurnal belum diinput.
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-[#64748b]">
+                    Catatan akan mengikuti kelas aktif dari data murid.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openCreateJournal(selectedStudent)}
+                    className="madani-button mt-3 w-full justify-center bg-[#0a1f5c] text-white"
                   >
-                    Edit
-                  </ActionButton>
-                  <ActionButton
-                    tone="danger"
-                    icon={<Trash2 className="h-3.5 w-3.5" />}
-                    onClick={() => {
-                      if (window.confirm("Hapus jurnal ini?"))
-                        deleteJournal.mutate(journal.id);
-                    }}
-                  >
-                    Hapus
-                  </ActionButton>
-                </ActionGroup>
-              ),
-            },
-          ]}
-        />
-      </Panel>
+                    <Plus className="h-3.5 w-3.5" />
+                    Isi jurnal
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <EmptyState text="Pilih murid untuk melihat jurnal." />
+          )}
+        </Panel>
+      </section>
     </div>
   );
 }
@@ -3895,8 +4001,10 @@ export function MilestonesPage() {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const students = listFrom(
-    useList<Student>(["students", "milestone-options"], "/students?status=active&perPage=100")
-      .data,
+    useList<Student>(
+      ["students", "milestone-options"],
+      "/students?status=active&perPage=100",
+    ).data,
   );
   const areasQuery = useList<MontessoriArea>(
     ["montessori-areas"],
@@ -3906,6 +4014,7 @@ export function MilestonesPage() {
   const [studentId, setStudentId] = useState("");
   const [areaId, setAreaId] = useState("");
   const [search, setSearch] = useState("");
+  const [studentLevelFilter, setStudentLevelFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editingMilestoneId, setEditingMilestoneId] = useState<number | null>(
@@ -3930,9 +4039,33 @@ export function MilestonesPage() {
     }
   }, [areaId, areas, milestoneForm.areaId]);
 
+  const filteredStudents = students.filter((student) => {
+    const keyword = search.trim().toLowerCase();
+    const matchSearch =
+      !keyword ||
+      [
+        student.fullName,
+        student.nickname ?? "",
+        student.nis ?? "",
+        studentClass(student),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword);
+
+    return (
+      matchSearch && matchesLevel(studentLevel(student), studentLevelFilter)
+    );
+  });
+
   useEffect(() => {
-    if (!studentId && students.length > 0) setStudentId(String(students[0].id));
-  }, [studentId, students]);
+    if (
+      filteredStudents.length > 0 &&
+      !filteredStudents.some((student) => String(student.id) === studentId)
+    ) {
+      setStudentId(String(filteredStudents[0].id));
+    }
+  }, [filteredStudents, studentId]);
 
   const studentMilestoneQuery = useList<MontessoriArea>(
     ["student-milestones", studentId],
@@ -3943,7 +4076,9 @@ export function MilestonesPage() {
   const activeAreas = studentAreas.length > 0 ? studentAreas : areas;
   const activeArea =
     activeAreas.find((area) => String(area.id) === areaId) ?? activeAreas[0];
-  const selectedStudent = students.find((student) => String(student.id) === studentId);
+  const selectedStudent = students.find(
+    (student) => String(student.id) === studentId,
+  );
   const selectedLevel = studentLevel(selectedStudent ?? ({} as Student));
   const selectedLevelIndex = levelOptions.indexOf(selectedLevel);
   const cappedLevels =
@@ -3957,26 +4092,11 @@ export function MilestonesPage() {
   );
   const activeMilestones = (activeArea?.milestones ?? []).filter(
     (milestone) => {
-      const keyword = search.trim().toLowerCase();
       if (
         milestoneLevelOptions.length > 0 &&
         !milestoneLevelOptions.some((level) =>
           matchesLevel(milestone.level, level),
         )
-      ) {
-        return false;
-      }
-      if (
-        keyword &&
-        ![
-          milestone.name,
-          milestone.description ?? "",
-          normalizeLevel(milestone.level),
-          statusLabel(milestone.studentStatus),
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(keyword)
       ) {
         return false;
       }
@@ -4002,11 +4122,6 @@ export function MilestonesPage() {
       ageMinMonths: "",
       ageMaxMonths: "",
     }));
-  }
-
-  function openCreateMilestone() {
-    resetMilestoneForm();
-    setFormOpen(true);
   }
 
   function openEditMilestone(milestone: MontessoriMilestone) {
@@ -4095,68 +4210,66 @@ export function MilestonesPage() {
         title="Montessori"
         description="Pantau progress milestone per anak dan kelola daftar milestone sekolah."
       >
-        <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div className="grid gap-1">
-            <p className="text-xs font-bold uppercase text-[#64748b]">
-              Hari ini, {formatDate(todayInput())}
-            </p>
-            <SearchField
-              value={search}
-              onChange={setSearch}
-              placeholder="Cari milestone, level, status"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {can("manage_milestone_definitions") ? (
-              <button
-                type="button"
-                onClick={openCreateMilestone}
-                className="madani-button bg-[#0a1f5c] text-white"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Tambah milestone
-              </button>
-            ) : null}
-            <Link
-              href="/milestones/archive"
-              className="madani-button border border-slate-200 bg-white text-[#0a1f5c]"
-            >
-              Semua data
-            </Link>
-          </div>
-        </div>
+        <SearchField
+          value={search}
+          onChange={setSearch}
+          placeholder="Cari murid, NIS, kelas"
+        />
       </PageHeader>
+      <CategoryTabs
+        value={studentLevelFilter}
+        onChange={setStudentLevelFilter}
+        items={levelTabs(students, (student) => studentLevel(student))}
+      />
 
       <Panel
-        title="Pilih murid"
-        description={selectedStudent ? `${selectedStudent.fullName} / ${studentClass(selectedStudent)}` : "Geser kartu untuk memilih murid."}
+        title="Daftar murid"
+        description={
+          selectedStudent
+            ? `${selectedStudent.fullName} / ${studentClass(selectedStudent)}`
+            : "Pilih murid."
+        }
       >
-        <div className="flex gap-3 overflow-x-auto pb-1">
-          {students.map((student) => {
+        <div className="flex min-h-[80px] gap-2 overflow-x-auto overflow-y-hidden pb-1 pr-1">
+          {filteredStudents.map((student) => {
             const active = String(student.id) === studentId;
             return (
               <button
                 type="button"
                 key={student.id}
                 onClick={() => setStudentId(String(student.id))}
-                className={`min-w-[240px] rounded-xl border p-3 text-left transition ${
+                className={`h-[82px] w-[240px] shrink-0 rounded-xl border px-3 text-left transition ${
                   active
                     ? "border-[#0a1f5c] bg-[#0a1f5c] text-white shadow-sm"
                     : "border-slate-200 bg-white text-[#0a1f5c] hover:border-[#0a1f5c]/30"
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <StudentPhotoFrame student={student} size="lg" active={active} />
+                <div className="grid h-full grid-cols-[48px_minmax(0,1fr)] items-center gap-2.5">
+                  <StudentPhotoFrame
+                    student={student}
+                    size="sm"
+                    active={active}
+                  />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold">{student.fullName}</p>
-                    <p className={`mt-0.5 text-xs ${active ? "text-white/72" : "text-[#64748b]"}`}>{student.nis ?? "NIS belum diisi"}</p>
-                    <p className={`mt-1 text-xs font-semibold ${active ? "text-white" : "text-[#0a1f5c]"}`}>{studentClass(student)}</p>
+                    <p className="truncate text-sm font-bold">
+                      {student.fullName}
+                    </p>
+                    <p
+                      className={`mt-0.5 truncate text-xs ${active ? "text-white/72" : "text-[#64748b]"}`}
+                    >
+                      {student.nis ?? "NIS belum diisi"} /{" "}
+                      {studentClass(student)}
+                    </p>
                   </div>
                 </div>
               </button>
             );
           })}
-          {students.length === 0 ? <EmptyState text="Belum ada murid aktif." /> : null}
+          {filteredStudents.length === 0 ? (
+            <div className="min-w-full">
+              <EmptyState text="Belum ada murid sesuai filter." />
+            </div>
+          ) : null}
         </div>
       </Panel>
 
@@ -4296,92 +4409,94 @@ export function MilestonesPage() {
                 : "Belum ada milestone di area ini."
             }
             columns={[
-            {
-              key: "milestone",
-              header: "Milestone",
-              render: (milestone) => (
-                <div>
-                  <p className="font-semibold text-[#0a1f5c]">
-                    {milestone.name}
-                  </p>
-                  <p className="line-clamp-1 text-xs text-[#64748b]">
-                    {milestone.description ?? "Belum ada deskripsi."}
-                  </p>
-                </div>
-              ),
-            },
-            {
-              key: "level",
-              header: "Level",
-              render: (milestone) => normalizeLevel(milestone.level),
-            },
-            {
-              key: "status",
-              header: "Status",
-              render: (milestone) => (
-                <StatusBadge value={milestone.studentStatus ?? "not_started"} />
-              ),
-            },
-            {
-              key: "actions",
-              header: "Aksi",
-              className: "min-w-[420px]",
-              render: (milestone) => (
-                <ActionGroup>
-                  {can("update_student_milestones")
-                    ? milestoneOptions.map((status) => (
-                        <button
-                          type="button"
-                          key={status}
-                          disabled={!studentId || updateStatus.isPending}
-                          onClick={() =>
-                            updateStatus.mutate({
-                              milestoneId: milestone.id,
-                              status,
-                            })
-                          }
-                          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                            (milestone.studentStatus ?? "not_started") ===
-                            status
-                              ? "border-[#0a1f5c] bg-[#0a1f5c] text-white"
-                              : "border-slate-200 bg-white text-[#334155]"
-                          }`}
-                        >
-                          {statusLabel(status)}
-                        </button>
-                      ))
-                    : null}
-                  {can("manage_milestone_definitions") ? (
-                    <ActionButton
-                      icon={<Pencil className="h-3.5 w-3.5" />}
-                      onClick={() => openEditMilestone(milestone)}
-                    >
-                      Edit
-                    </ActionButton>
-                  ) : null}
-                  {can("manage_milestone_definitions") ? (
-                    <ActionButton
-                      tone="danger"
-                      icon={<Trash2 className="h-3.5 w-3.5" />}
-                      onClick={() => {
-                        if (
-                          window.confirm(`Hapus milestone ${milestone.name}?`)
-                        )
-                          deleteMilestone.mutate(milestone.id);
-                      }}
-                    >
-                      Hapus
-                    </ActionButton>
-                  ) : null}
-                  {!can("update_student_milestones") &&
-                  !can("manage_milestone_definitions") ? (
-                    <span className="text-xs font-semibold text-[#64748b]">
-                      Lihat saja
-                    </span>
-                  ) : null}
-                </ActionGroup>
-              ),
-            },
+              {
+                key: "milestone",
+                header: "Milestone",
+                render: (milestone) => (
+                  <div>
+                    <p className="font-semibold text-[#0a1f5c]">
+                      {milestone.name}
+                    </p>
+                    <p className="line-clamp-1 text-xs text-[#64748b]">
+                      {milestone.description ?? "Belum ada deskripsi."}
+                    </p>
+                  </div>
+                ),
+              },
+              {
+                key: "level",
+                header: "Level",
+                render: (milestone) => normalizeLevel(milestone.level),
+              },
+              {
+                key: "status",
+                header: "Status",
+                render: (milestone) => (
+                  <StatusBadge
+                    value={milestone.studentStatus ?? "not_started"}
+                  />
+                ),
+              },
+              {
+                key: "actions",
+                header: "Aksi",
+                className: "min-w-[420px]",
+                render: (milestone) => (
+                  <ActionGroup>
+                    {can("update_student_milestones")
+                      ? milestoneOptions.map((status) => (
+                          <button
+                            type="button"
+                            key={status}
+                            disabled={!studentId || updateStatus.isPending}
+                            onClick={() =>
+                              updateStatus.mutate({
+                                milestoneId: milestone.id,
+                                status,
+                              })
+                            }
+                            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                              (milestone.studentStatus ?? "not_started") ===
+                              status
+                                ? "border-[#0a1f5c] bg-[#0a1f5c] text-white"
+                                : "border-slate-200 bg-white text-[#334155]"
+                            }`}
+                          >
+                            {statusLabel(status)}
+                          </button>
+                        ))
+                      : null}
+                    {can("manage_milestone_definitions") ? (
+                      <ActionButton
+                        icon={<Pencil className="h-3.5 w-3.5" />}
+                        onClick={() => openEditMilestone(milestone)}
+                      >
+                        Edit
+                      </ActionButton>
+                    ) : null}
+                    {can("manage_milestone_definitions") ? (
+                      <ActionButton
+                        tone="danger"
+                        icon={<Trash2 className="h-3.5 w-3.5" />}
+                        onClick={() => {
+                          if (
+                            window.confirm(`Hapus milestone ${milestone.name}?`)
+                          )
+                            deleteMilestone.mutate(milestone.id);
+                        }}
+                      >
+                        Hapus
+                      </ActionButton>
+                    ) : null}
+                    {!can("update_student_milestones") &&
+                    !can("manage_milestone_definitions") ? (
+                      <span className="text-xs font-semibold text-[#64748b]">
+                        Lihat saja
+                      </span>
+                    ) : null}
+                  </ActionGroup>
+                ),
+              },
             ]}
           />
         </div>
@@ -4399,10 +4514,6 @@ export function ReportsPage() {
     useList<Student>(["students", "report-options"], "/students?perPage=100")
       .data,
   );
-  const classes = listFrom(
-    useList<SchoolClass>(["classes", "report-options"], "/classes?perPage=100")
-      .data,
-  );
   const years = listFrom(
     useList<AcademicYear>(
       ["academic-years", "report-options"],
@@ -4411,6 +4522,9 @@ export function ReportsPage() {
   );
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(
+    null,
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [editingReportId, setEditingReportId] = useState<number | null>(null);
   const filteredReports = reports.filter((report) => {
@@ -4433,6 +4547,28 @@ export function ReportsPage() {
 
     return matchesLevel(report.class?.level, levelFilter);
   });
+  const filteredStudents = students.filter((student) => {
+    const keyword = search.trim().toLowerCase();
+    const matchKeyword =
+      !keyword ||
+      [
+        student.fullName,
+        student.nickname ?? "",
+        student.nis ?? "",
+        studentClass(student),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword);
+
+    return matchKeyword && matchesLevel(studentLevel(student), levelFilter);
+  });
+  const selectedStudent =
+    students.find((student) => student.id === selectedStudentId) ??
+    filteredStudents[0];
+  const selectedReports = selectedStudent
+    ? reports.filter((report) => report.student?.id === selectedStudent.id)
+    : [];
   const [form, setForm] = useState({
     studentId: "",
     classId: "",
@@ -4454,11 +4590,22 @@ export function ReportsPage() {
     }
   }, [form.academicYearId, years]);
 
+  useEffect(() => {
+    if (
+      filteredStudents.length > 0 &&
+      !filteredStudents.some((student) => student.id === selectedStudentId)
+    ) {
+      setSelectedStudentId(filteredStudents[0].id);
+    }
+  }, [filteredStudents, selectedStudentId]);
+
   function resetReportForm() {
     setEditingReportId(null);
     setForm((current) => ({
-      studentId: "",
-      classId: "",
+      studentId: selectedStudent?.id ? String(selectedStudent.id) : "",
+      classId: selectedStudent?.classes?.[0]?.id
+        ? String(selectedStudent.classes[0].id)
+        : "",
       academicYearId: current.academicYearId || "",
       semester: "1",
       generalNotes: "",
@@ -4489,11 +4636,21 @@ export function ReportsPage() {
   }
 
   const save = useMutation({
-    mutationFn: () =>
-      apiFetch<Report>(
+    mutationFn: () => {
+      const formStudent = students.find(
+        (student) => String(student.id) === form.studentId,
+      );
+      return apiFetch<Report>(
         editingReportId ? `/reports/${editingReportId}` : "/reports",
-        { method: editingReportId ? "PUT" : "POST", body: form },
-      ),
+        {
+          method: editingReportId ? "PUT" : "POST",
+          body: {
+            ...form,
+            classId: String(studentClassId(formStudent) ?? form.classId),
+          },
+        },
+      );
+    },
     onSuccess: () => {
       toast.success("Draft raport tersimpan");
       resetReportForm();
@@ -4536,14 +4693,6 @@ export function ReportsPage() {
             onChange={setSearch}
             placeholder="Cari murid, kelas, semester"
           />
-          <button
-            type="button"
-            onClick={openCreateReport}
-            className="madani-button bg-[#0a1f5c] text-white"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Draft raport
-          </button>
         </div>
       </PageHeader>
 
@@ -4568,25 +4717,23 @@ export function ReportsPage() {
               label="Murid"
               value={form.studentId}
               required
-              onChange={(value) => setForm({ ...form, studentId: value })}
+              onChange={(value) => {
+                const student = students.find(
+                  (item) => String(item.id) === value,
+                );
+                setForm({
+                  ...form,
+                  studentId: value,
+                  classId: studentClassId(student)
+                    ? String(studentClassId(student))
+                    : "",
+                });
+              }}
             >
               <option value="">Pilih murid</option>
               {students.map((student) => (
                 <option key={student.id} value={student.id}>
                   {student.fullName}
-                </option>
-              ))}
-            </SelectField>
-            <SelectField
-              label="Kelas"
-              value={form.classId}
-              required
-              onChange={(value) => setForm({ ...form, classId: value })}
-            >
-              <option value="">Pilih kelas</option>
-              {classes.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {classLabel(item)}
                 </option>
               ))}
             </SelectField>
@@ -4632,96 +4779,168 @@ export function ReportsPage() {
         </form>
       </DrawerForm>
 
-      <Panel
-        title="Daftar raport"
-        description={`${filteredReports.length} draft atau publish.`}
-      >
-        <CategoryTabs
-          value={levelFilter}
-          onChange={setLevelFilter}
-          items={levelTabs(reports, (report) => report.class?.level)}
-        />
-        <CompactTable
-          data={filteredReports}
-          rowKey={(report) => report.id}
-          emptyText="Belum ada draft raport."
-          columns={[
-            {
-              key: "student",
-              header: "Murid",
-              render: (report) => (
-                <div>
-                  <p className="font-semibold text-[#0a1f5c]">
-                    {report.student?.fullName ?? "-"}
+      <CategoryTabs
+        value={levelFilter}
+        onChange={setLevelFilter}
+        items={levelTabs(students, (student) => studentLevel(student))}
+      />
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(380px,0.9fr)]">
+        <Panel
+          title="Daftar murid"
+          description={`${filteredReports.length} raport sesuai filter.`}
+        >
+          <div className="grid max-h-[calc(100dvh-270px)] min-h-[360px] auto-rows-[72px] content-start gap-2 overflow-y-auto pr-1">
+            {filteredStudents.map((student) => {
+              const studentReports = reports.filter(
+                (report) => report.student?.id === student.id,
+              );
+              const active = selectedStudent?.id === student.id;
+              const unpublished = studentReports.filter(
+                (report) => !report.publishedAt,
+              ).length;
+              return (
+                <button
+                  key={student.id}
+                  type="button"
+                  onClick={() => setSelectedStudentId(student.id)}
+                  className={`h-[72px] rounded-xl border px-3 text-left transition ${active ? "border-[#0a1f5c] bg-[#0a1f5c] text-white" : "border-slate-200 bg-white text-[#0a1f5c] hover:border-[#0a1f5c]/30"}`}
+                >
+                  <div className="grid h-full grid-cols-[48px_1fr_auto] items-center gap-2.5">
+                    <StudentPhotoFrame
+                      student={student}
+                      size="sm"
+                      active={active}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold">
+                        {student.fullName}
+                      </p>
+                      <p
+                        className={`mt-0.5 truncate text-xs ${active ? "text-white/72" : "text-[#64748b]"}`}
+                      >
+                        {student.nis ?? "NIS belum diisi"} /{" "}
+                        {studentClass(student)}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-1 text-[11px] font-bold ${active ? "bg-white/15 text-white" : unpublished > 0 ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}
+                    >
+                      {studentReports.length} raport
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+            {filteredStudents.length === 0 ? (
+              <EmptyState text="Belum ada murid sesuai filter." />
+            ) : null}
+          </div>
+        </Panel>
+
+        <Panel
+          title="Raport murid"
+          description={
+            selectedStudent
+              ? `${selectedStudent.fullName} / ${studentClass(selectedStudent)}`
+              : "Pilih murid."
+          }
+        >
+          {selectedStudent ? (
+            <div className="grid gap-3">
+              <div className="grid grid-cols-[72px_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <StudentPhotoFrame student={selectedStudent} size="lg" />
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-[#0a1f5c]">
+                    {selectedStudent.fullName}
                   </p>
                   <p className="text-xs text-[#64748b]">
-                    {report.class?.name ?? "-"} / Semester {report.semester}
+                    {selectedStudent.nis ?? "NIS belum diisi"} /{" "}
+                    {studentClass(selectedStudent)}
                   </p>
                 </div>
-              ),
-            },
-            {
-              key: "year",
-              header: "Tahun ajaran",
-              render: (report) => report.academicYear?.name ?? "-",
-            },
-            {
-              key: "signature",
-              header: "Status",
-              render: (report) => (
-                <StatusBadge
-                  value={
-                    report.signatureStatus ??
-                    (report.publishedAt ? "visual_signed" : "pending")
-                  }
-                />
-              ),
-            },
-            {
-              key: "actions",
-              header: "Aksi",
-              className: "w-[320px]",
-              render: (report) => (
-                <ActionGroup>
-                  <ActionButton
-                    icon={<Pencil className="h-3.5 w-3.5" />}
-                    onClick={() => openEditReport(report)}
+              </div>
+              <button
+                type="button"
+                onClick={openCreateReport}
+                className="madani-button w-full justify-center bg-[#0a1f5c] text-white"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Draft raport murid ini
+              </button>
+              <div className="grid gap-2">
+                {selectedReports.map((report) => (
+                  <article
+                    key={report.id}
+                    className="rounded-xl border border-slate-200 bg-white p-3"
                   >
-                    Edit
-                  </ActionButton>
-                  <ActionButton
-                    tone="primary"
-                    icon={<FileSignature className="h-3.5 w-3.5" />}
-                    onClick={() => publish.mutate(report.id)}
-                  >
-                    Publish PDF
-                  </ActionButton>
-                  {report.pdfUrl ? (
-                    <a
-                      className="inline-flex h-8 items-center justify-center whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 text-[11px] font-semibold text-[#0a1f5c]"
-                      href={report.pdfUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Buka PDF
-                    </a>
-                  ) : null}
-                  <ActionButton
-                    tone="danger"
-                    icon={<Trash2 className="h-3.5 w-3.5" />}
-                    onClick={() => {
-                      if (window.confirm("Hapus raport ini?"))
-                        deleteReport.mutate(report.id);
-                    }}
-                  >
-                    Hapus
-                  </ActionButton>
-                </ActionGroup>
-              ),
-            },
-          ]}
-        />
-      </Panel>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-[#0a1f5c]">
+                          Semester {report.semester}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[#64748b]">
+                          {report.academicYear?.name ?? "Tahun ajaran"} /{" "}
+                          {report.class?.name ?? "-"}
+                        </p>
+                      </div>
+                      <StatusBadge
+                        value={
+                          report.signatureStatus ??
+                          (report.publishedAt ? "visual_signed" : "pending")
+                        }
+                      />
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#334155]">
+                      {report.generalNotes || "Catatan umum belum diisi."}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <ActionButton
+                        icon={<Pencil className="h-3.5 w-3.5" />}
+                        onClick={() => openEditReport(report)}
+                      >
+                        Edit
+                      </ActionButton>
+                      <ActionButton
+                        tone="primary"
+                        icon={<FileSignature className="h-3.5 w-3.5" />}
+                        onClick={() => publish.mutate(report.id)}
+                      >
+                        Publish
+                      </ActionButton>
+                      {report.pdfUrl ? (
+                        <a
+                          className="inline-flex h-8 items-center justify-center rounded-full border border-slate-200 bg-white px-2.5 text-[11px] font-semibold text-[#0a1f5c]"
+                          href={report.pdfUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          PDF
+                        </a>
+                      ) : null}
+                      <ActionButton
+                        tone="danger"
+                        icon={<Trash2 className="h-3.5 w-3.5" />}
+                        onClick={() => {
+                          if (window.confirm("Hapus raport ini?"))
+                            deleteReport.mutate(report.id);
+                        }}
+                      >
+                        Hapus
+                      </ActionButton>
+                    </div>
+                  </article>
+                ))}
+                {selectedReports.length === 0 ? (
+                  <EmptyState text="Belum ada raport untuk murid ini." />
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <EmptyState text="Pilih murid untuk melihat raport." />
+          )}
+        </Panel>
+      </section>
     </div>
   );
 }
@@ -5486,7 +5705,10 @@ export function AgendasPage() {
           />
         </Panel>
 
-        <Panel title="Kalender" description="Klik tanggal untuk filter. Tambah agenda pakai tombol aksi.">
+        <Panel
+          title="Kalender"
+          description="Klik tanggal untuk filter. Tambah agenda pakai tombol aksi."
+        >
           <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-[#64748b]">
             {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((day) => (
               <span key={day}>{day}</span>
@@ -5598,7 +5820,10 @@ export function EnrollmentUpdatesPage() {
       fullName: row.fullName,
       programLevel: row.programLevel ?? "",
       address: row.address ?? "",
-      targetAmount: row.targetAmount === null || row.targetAmount === undefined ? "" : String(row.targetAmount),
+      targetAmount:
+        row.targetAmount === null || row.targetAmount === undefined
+          ? ""
+          : String(row.targetAmount),
       paidAmount: String(row.paidAmount ?? 0),
       paymentStatus: row.paymentStatus,
       confirmationStatus: row.confirmationStatus,
@@ -5654,7 +5879,9 @@ export function EnrollmentUpdatesPage() {
       setFormOpen(false);
       setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["enrollment-updates"] });
-      queryClient.invalidateQueries({ queryKey: ["enrollment-updates-summary"] });
+      queryClient.invalidateQueries({
+        queryKey: ["enrollment-updates-summary"],
+      });
       queryClient.invalidateQueries({ queryKey: ["fees-summary"] });
     },
     onError: (error) => toast.error(error.message),
@@ -5666,7 +5893,9 @@ export function EnrollmentUpdatesPage() {
     onSuccess: () => {
       toast.success("Update pendaftaran dihapus");
       queryClient.invalidateQueries({ queryKey: ["enrollment-updates"] });
-      queryClient.invalidateQueries({ queryKey: ["enrollment-updates-summary"] });
+      queryClient.invalidateQueries({
+        queryKey: ["enrollment-updates-summary"],
+      });
       queryClient.invalidateQueries({ queryKey: ["fees-summary"] });
     },
     onError: (error) => toast.error(error.message),
@@ -5705,10 +5934,30 @@ export function EnrollmentUpdatesPage() {
       </PageHeader>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <CompactStatCard label="Total Target" value={compactMoney(summary?.target)} description="Siswa baru + daftar ulang" borderColor="blue" />
-        <CompactStatCard label="Sudah Masuk" value={compactMoney(summary?.paid)} description={`${summary?.paidCount ?? 0} data lunas`} borderColor="emerald" />
-        <CompactStatCard label="Sisa Tercatat" value={compactMoney(summary?.outstanding)} description={`${summary?.partialCount ?? 0} data partial`} borderColor="amber" />
-        <CompactStatCard label="Belum Bayar" value={`${summary?.unpaidCount ?? 0} data`} description={`${summary?.financialCount ?? 0} data keuangan`} borderColor="rose" />
+        <CompactStatCard
+          label="Total Target"
+          value={compactMoney(summary?.target)}
+          description="Siswa baru + daftar ulang"
+          borderColor="blue"
+        />
+        <CompactStatCard
+          label="Sudah Masuk"
+          value={compactMoney(summary?.paid)}
+          description={`${summary?.paidCount ?? 0} data lunas`}
+          borderColor="emerald"
+        />
+        <CompactStatCard
+          label="Sisa Tercatat"
+          value={compactMoney(summary?.outstanding)}
+          description={`${summary?.partialCount ?? 0} data partial`}
+          borderColor="amber"
+        />
+        <CompactStatCard
+          label="Belum Bayar"
+          value={`${summary?.unpaidCount ?? 0} data`}
+          description={`${summary?.financialCount ?? 0} data keuangan`}
+          borderColor="rose"
+        />
       </section>
 
       <Panel
@@ -5754,7 +6003,9 @@ export function EnrollmentUpdatesPage() {
                 <div>
                   <p className="font-semibold text-[#0a1f5c]">{row.fullName}</p>
                   <p className="text-xs text-[#64748b]">
-                    {[row.programLevel, row.address].filter(Boolean).join(" / ") || "-"}
+                    {[row.programLevel, row.address]
+                      .filter(Boolean)
+                      .join(" / ") || "-"}
                   </p>
                 </div>
               ),
@@ -5772,7 +6023,9 @@ export function EnrollmentUpdatesPage() {
                   <div>
                     <p className="font-semibold text-[#0a1f5c]">
                       {formatMoney(row.paidAmount)}
-                      {row.targetAmount ? ` / ${formatMoney(row.targetAmount)}` : ""}
+                      {row.targetAmount
+                        ? ` / ${formatMoney(row.targetAmount)}`
+                        : ""}
                     </p>
                     <p className="text-xs text-[#64748b]">
                       Sisa {formatMoney(row.outstandingAmount)}
@@ -5800,8 +6053,12 @@ export function EnrollmentUpdatesPage() {
               render: (row) => (
                 <div className="text-xs font-semibold text-[#64748b]">
                   {row.student ? <p>Murid: {row.student.fullName}</p> : null}
-                  {row.registration ? <p>PPDB: {row.registration.registrationNumber}</p> : null}
-                  {!row.student && !row.registration ? <p>Belum cocok</p> : null}
+                  {row.registration ? (
+                    <p>PPDB: {row.registration.registrationNumber}</p>
+                  ) : null}
+                  {!row.student && !row.registration ? (
+                    <p>Belum cocok</p>
+                  ) : null}
                 </div>
               ),
             },
@@ -5929,7 +6186,10 @@ export function EnrollmentUpdatesPage() {
               label="Status bayar"
               value={form.paymentStatus}
               onChange={(value) =>
-                setForm({ ...form, paymentStatus: value as EnrollmentPaymentStatus })
+                setForm({
+                  ...form,
+                  paymentStatus: value as EnrollmentPaymentStatus,
+                })
               }
             >
               {(isEnrollmentFinancial(form.category)
@@ -6332,7 +6592,9 @@ export function SettingsPage() {
   )
     ? (sectionParam as SettingsTabKey)
     : "years";
-  const [settingsSection, setSettingsSection] = useState<"website" | "users" | "roles">("website");
+  const [settingsSection, setSettingsSection] = useState<
+    "website" | "users" | "roles"
+  >("website");
   const [yearSearch, setYearSearch] = useState("");
   const settingsQuery = useList<SettingRow>(["settings"], "/settings");
   const yearsQuery = useList<AcademicYear>(
@@ -6389,7 +6651,11 @@ export function SettingsPage() {
         signatureUrl: settingValue(settings, "principal_signature_url", ""),
       });
       setSiteSettings({
-        headline: settingValue(settings, "website_headline", "PPDB Madani Montessori Islamic School"),
+        headline: settingValue(
+          settings,
+          "website_headline",
+          "PPDB Madani Montessori Islamic School",
+        ),
         whatsapp: settingValue(settings, "website_whatsapp", ""),
         address: settingValue(settings, "school_address", ""),
         ppdbOpen: settingValue(settings, "ppdb_online_enabled", "1") !== "0",
@@ -6506,11 +6772,31 @@ export function SettingsPage() {
         method: "PUT",
         body: {
           settings: [
-            { key: "website_headline", value: siteSettings.headline, type: "text" },
-            { key: "website_whatsapp", value: siteSettings.whatsapp, type: "text" },
-            { key: "school_address", value: siteSettings.address, type: "text" },
-            { key: "ppdb_online_enabled", value: siteSettings.ppdbOpen ? "1" : "0", type: "boolean" },
-            { key: "website_announcement", value: siteSettings.announcement, type: "text" },
+            {
+              key: "website_headline",
+              value: siteSettings.headline,
+              type: "text",
+            },
+            {
+              key: "website_whatsapp",
+              value: siteSettings.whatsapp,
+              type: "text",
+            },
+            {
+              key: "school_address",
+              value: siteSettings.address,
+              type: "text",
+            },
+            {
+              key: "ppdb_online_enabled",
+              value: siteSettings.ppdbOpen ? "1" : "0",
+              type: "boolean",
+            },
+            {
+              key: "website_announcement",
+              value: siteSettings.announcement,
+              type: "text",
+            },
           ],
         },
       }),
@@ -6595,7 +6881,9 @@ export function SettingsPage() {
             <button
               key={item.key}
               type="button"
-              onClick={() => setSettingsSection(item.key as "website" | "users" | "roles")}
+              onClick={() =>
+                setSettingsSection(item.key as "website" | "users" | "roles")
+              }
               className={`rounded-xl border p-3 text-left transition ${
                 settingsSection === item.key
                   ? "border-[#0a1f5c]/30 bg-[#0a1f5c]/5 text-[#0a1f5c]"
@@ -6609,7 +6897,9 @@ export function SettingsPage() {
             </button>
           ))}
         </div>
-        <div className={settingsSection === "website" ? "grid gap-1.5" : "hidden"}>
+        <div
+          className={settingsSection === "website" ? "grid gap-1.5" : "hidden"}
+        >
           {settingsTabs.map((item) => (
             <button
               key={item.key}
@@ -6635,331 +6925,348 @@ export function SettingsPage() {
       <div className="grid gap-4">
         {settingsSection === "users" ? <UsersPage /> : null}
         {settingsSection === "roles" ? <RolesSettingsPage /> : null}
-        <div className={settingsSection === "website" ? "grid gap-4" : "hidden"}>
-        <DrawerForm
-          open={yearFormOpen}
-          title={editingYearId ? "Edit tahun ajaran" : "Tambah tahun ajaran"}
-          description="Periode belajar sekolah."
-          onClose={() => {
-            setYearFormOpen(false);
-            resetYearForm();
-          }}
+        <div
+          className={settingsSection === "website" ? "grid gap-4" : "hidden"}
         >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              createYear.mutate();
+          <DrawerForm
+            open={yearFormOpen}
+            title={editingYearId ? "Edit tahun ajaran" : "Tambah tahun ajaran"}
+            description="Periode belajar sekolah."
+            onClose={() => {
+              setYearFormOpen(false);
+              resetYearForm();
             }}
-            className="grid gap-3"
-          >
-            <TextInput
-              label="Nama tahun ajaran"
-              value={yearForm.name}
-              required
-              onChange={(value) => setYearForm({ ...yearForm, name: value })}
-            />
-            <TextInput
-              label="Tanggal mulai tahun ajaran baru"
-              type="date"
-              value={yearForm.startDate}
-              required
-              onChange={(value) =>
-                setYearForm({ ...yearForm, startDate: value })
-              }
-            />
-            <TextInput
-              label="Tanggal berakhir tahun ajaran baru"
-              type="date"
-              value={yearForm.endDate}
-              required
-              onChange={(value) => setYearForm({ ...yearForm, endDate: value })}
-            />
-            <label className="flex items-center gap-3 text-xs font-semibold text-[#0a1f5c]">
-              <input
-                type="checkbox"
-                checked={yearForm.isActive}
-                onChange={(event) =>
-                  setYearForm({ ...yearForm, isActive: event.target.checked })
-                }
-              />
-              Jadikan aktif
-            </label>
-            <SubmitButton pending={createYear.isPending}>
-              Simpan tahun ajaran
-            </SubmitButton>
-          </form>
-        </DrawerForm>
-
-        {tab === "years" ? (
-          <Panel
-            title="Tahun ajaran"
-            description={`${filteredYears.length} tahun ajaran tampil. Sistem memilih tahun ajaran dari tanggal hari ini; Mei 2026 masuk 2025/2026, setelah tanggal mulai akhir Juni masuk 2026/2027.`}
-            action={
-              <button
-                type="button"
-                onClick={openCreateYear}
-                className="madani-button bg-[#0a1f5c] text-white"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Tambah tahun
-              </button>
-            }
-          >
-            <div className="mb-3">
-              <SearchField
-                value={yearSearch}
-                onChange={setYearSearch}
-                placeholder="Cari tahun ajaran"
-              />
-            </div>
-            <CompactTable
-              data={filteredYears}
-              rowKey={(year) => year.id}
-              emptyText={
-                yearsQuery.isLoading
-                  ? "Memuat tahun ajaran."
-                  : "Tidak ada tahun ajaran sesuai pencarian."
-              }
-              columns={[
-                {
-                  key: "name",
-                  header: "Tahun ajaran",
-                  render: (year) => (
-                    <span className="font-semibold text-[#0a1f5c]">
-                      {year.name}
-                    </span>
-                  ),
-                },
-                {
-                  key: "period",
-                  header: "Periode",
-                  render: (year) =>
-                    `${formatDate(year.startDate)} - ${formatDate(year.endDate)}`,
-                },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (year) =>
-                    year.isActive ? (
-                      <StatusBadge value="active" />
-                    ) : (
-                      <StatusBadge value="inactive" />
-                    ),
-                },
-                {
-                  key: "action",
-                  header: "Aksi",
-                  className: "w-[230px]",
-                  render: (year) => (
-                    <ActionGroup>
-                      <ActionButton
-                        icon={<Pencil className="h-3.5 w-3.5" />}
-                        onClick={() => openEditYear(year)}
-                      >
-                        Edit
-                      </ActionButton>
-                      {!year.isActive ? (
-                        <ActionButton
-                          tone="primary"
-                          onClick={() => activateYear.mutate(year.id)}
-                        >
-                          Aktifkan
-                        </ActionButton>
-                      ) : null}
-                      <ActionButton
-                        tone="danger"
-                        icon={<Trash2 className="h-3.5 w-3.5" />}
-                        disabled={Boolean(year.isActive)}
-                        onClick={() => {
-                          if (
-                            window.confirm(`Hapus tahun ajaran ${year.name}?`)
-                          )
-                            deleteYear.mutate(year.id);
-                        }}
-                      >
-                        Hapus
-                      </ActionButton>
-                    </ActionGroup>
-                  ),
-                },
-              ]}
-            />
-          </Panel>
-        ) : null}
-
-        {tab === "documents" ? (
-          <Panel
-            title="Dokumen PPDB"
-            description="Daftar ini muncul sebagai syarat pendaftaran online."
-          >
-            <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  saveDocuments.mutate();
-                }}
-                className="grid gap-3"
-              >
-                <TextArea
-                  label="Dokumen wajib PPDB"
-                  value={documents}
-                  rows={9}
-                  onChange={setDocuments}
-                />
-                <p className="text-xs font-semibold text-[#64748b]">
-                  Satu baris untuk satu dokumen.
-                </p>
-                <SubmitButton pending={saveDocuments.isPending}>
-                  Simpan dokumen
-                </SubmitButton>
-              </form>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="mb-3 text-xs font-bold uppercase text-[#64748b]">
-                  Preview syarat
-                </p>
-                <div className="grid gap-1.5">
-                  {requiredDocuments.map((document) => (
-                    <div
-                      key={document}
-                      className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-medium text-[#334155]"
-                    >
-                      <Check className="h-4 w-4 text-emerald-600" />
-                      {document}
-                    </div>
-                  ))}
-                  {requiredDocuments.length === 0 ? (
-                    <EmptyState text="Belum ada dokumen wajib." />
-                  ) : null}
-                </div>
-              </div>
-            </section>
-          </Panel>
-        ) : null}
-
-        {tab === "signature" ? (
-          <Panel
-            title="Tanda tangan raport"
-            description="Dipakai untuk PDF raport yang dipublish sekolah."
-          >
-            <section className="grid gap-4 xl:grid-cols-[0.86fr_1.14fr]">
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  saveSignature.mutate();
-                }}
-                className="grid gap-3"
-              >
-                <TextInput
-                  label="Nama kepala sekolah"
-                  value={signature.principalName}
-                  required
-                  onChange={(value) =>
-                    setSignature({ ...signature, principalName: value })
-                  }
-                />
-                <TextInput
-                  label="Jabatan"
-                  value={signature.principalTitle}
-                  required
-                  onChange={(value) =>
-                    setSignature({ ...signature, principalTitle: value })
-                  }
-                />
-                <FileField
-                  label="Gambar tanda tangan"
-                  files={file ? [file] : []}
-                  accept="image/png,image/jpeg"
-                  onChange={(files) => setFile(files[0] ?? null)}
-                />
-                <TextInput
-                  label="URL gambar tanda tangan"
-                  value={signature.signatureUrl}
-                  onChange={(value) =>
-                    setSignature({ ...signature, signatureUrl: value })
-                  }
-                />
-                <SubmitButton pending={saveSignature.isPending}>
-                  Simpan tanda tangan
-                </SubmitButton>
-              </form>
-              <div className="grid content-start gap-3">
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <p className="text-xs font-bold uppercase text-[#64748b]">
-                    Tampil di PDF
-                  </p>
-                  <p className="mt-3 text-base font-bold text-[#0a1f5c]">
-                    {signature.principalName}
-                  </p>
-                  <p className="text-sm font-medium text-[#64748b]">
-                    {signature.principalTitle}
-                  </p>
-                  <div className="mt-4 h-16 rounded-xl border border-dashed border-slate-200 bg-slate-50" />
-                </div>
-                <p className="rounded-xl bg-amber-50 p-3 text-xs font-medium leading-5 text-amber-800">
-                  Tanda tangan ini visual untuk PDF raport, bukan TTE
-                  tersertifikasi PSrE.
-                </p>
-              </div>
-            </section>
-          </Panel>
-        ) : null}
-
-        {tab === "site" ? (
-          <Panel
-            title="Info website"
-            description="Kontrol konten singkat yang dipakai website publik dan alur PPDB."
           >
             <form
               onSubmit={(event) => {
                 event.preventDefault();
-                saveSiteSettings.mutate();
+                createYear.mutate();
               }}
-              className="grid gap-3 xl:grid-cols-2"
+              className="grid gap-3"
             >
               <TextInput
-                label="Judul PPDB / website"
-                value={siteSettings.headline}
-                onChange={(value) => setSiteSettings({ ...siteSettings, headline: value })}
+                label="Nama tahun ajaran"
+                value={yearForm.name}
+                required
+                onChange={(value) => setYearForm({ ...yearForm, name: value })}
               />
               <TextInput
-                label="Nomor WhatsApp admin"
-                value={siteSettings.whatsapp}
-                placeholder="62812..."
-                onChange={(value) => setSiteSettings({ ...siteSettings, whatsapp: value })}
+                label="Tanggal mulai tahun ajaran baru"
+                type="date"
+                value={yearForm.startDate}
+                required
+                onChange={(value) =>
+                  setYearForm({ ...yearForm, startDate: value })
+                }
               />
-              <div className="xl:col-span-2">
-                <TextArea
-                  label="Alamat sekolah"
-                  value={siteSettings.address}
-                  rows={3}
-                  onChange={(value) => setSiteSettings({ ...siteSettings, address: value })}
-                />
-              </div>
-              <div className="xl:col-span-2">
-                <TextArea
-                  label="Pengumuman website"
-                  value={siteSettings.announcement}
-                  rows={4}
-                  placeholder="Contoh: PPDB gelombang 1 dibuka sampai 30 Juni."
-                  onChange={(value) => setSiteSettings({ ...siteSettings, announcement: value })}
-                />
-              </div>
-              <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-[#0a1f5c]">
+              <TextInput
+                label="Tanggal berakhir tahun ajaran baru"
+                type="date"
+                value={yearForm.endDate}
+                required
+                onChange={(value) =>
+                  setYearForm({ ...yearForm, endDate: value })
+                }
+              />
+              <label className="flex items-center gap-3 text-xs font-semibold text-[#0a1f5c]">
                 <input
                   type="checkbox"
-                  checked={siteSettings.ppdbOpen}
-                  onChange={(event) => setSiteSettings({ ...siteSettings, ppdbOpen: event.target.checked })}
+                  checked={yearForm.isActive}
+                  onChange={(event) =>
+                    setYearForm({ ...yearForm, isActive: event.target.checked })
+                  }
                 />
-                Form PPDB online aktif
+                Jadikan aktif
               </label>
-              <div className="xl:col-span-2">
-                <SubmitButton pending={saveSiteSettings.isPending}>
-                  Simpan pengaturan website
-                </SubmitButton>
-              </div>
+              <SubmitButton pending={createYear.isPending}>
+                Simpan tahun ajaran
+              </SubmitButton>
             </form>
-          </Panel>
-        ) : null}
+          </DrawerForm>
+
+          {tab === "years" ? (
+            <Panel
+              title="Tahun ajaran"
+              description={`${filteredYears.length} tahun ajaran tampil. Sistem memilih tahun ajaran dari tanggal hari ini; Mei 2026 masuk 2025/2026, setelah tanggal mulai akhir Juni masuk 2026/2027.`}
+              action={
+                <button
+                  type="button"
+                  onClick={openCreateYear}
+                  className="madani-button bg-[#0a1f5c] text-white"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Tambah tahun
+                </button>
+              }
+            >
+              <div className="mb-3">
+                <SearchField
+                  value={yearSearch}
+                  onChange={setYearSearch}
+                  placeholder="Cari tahun ajaran"
+                />
+              </div>
+              <CompactTable
+                data={filteredYears}
+                rowKey={(year) => year.id}
+                emptyText={
+                  yearsQuery.isLoading
+                    ? "Memuat tahun ajaran."
+                    : "Tidak ada tahun ajaran sesuai pencarian."
+                }
+                columns={[
+                  {
+                    key: "name",
+                    header: "Tahun ajaran",
+                    render: (year) => (
+                      <span className="font-semibold text-[#0a1f5c]">
+                        {year.name}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "period",
+                    header: "Periode",
+                    render: (year) =>
+                      `${formatDate(year.startDate)} - ${formatDate(year.endDate)}`,
+                  },
+                  {
+                    key: "status",
+                    header: "Status",
+                    render: (year) =>
+                      year.isActive ? (
+                        <StatusBadge value="active" />
+                      ) : (
+                        <StatusBadge value="inactive" />
+                      ),
+                  },
+                  {
+                    key: "action",
+                    header: "Aksi",
+                    className: "w-[230px]",
+                    render: (year) => (
+                      <ActionGroup>
+                        <ActionButton
+                          icon={<Pencil className="h-3.5 w-3.5" />}
+                          onClick={() => openEditYear(year)}
+                        >
+                          Edit
+                        </ActionButton>
+                        {!year.isActive ? (
+                          <ActionButton
+                            tone="primary"
+                            onClick={() => activateYear.mutate(year.id)}
+                          >
+                            Aktifkan
+                          </ActionButton>
+                        ) : null}
+                        <ActionButton
+                          tone="danger"
+                          icon={<Trash2 className="h-3.5 w-3.5" />}
+                          disabled={Boolean(year.isActive)}
+                          onClick={() => {
+                            if (
+                              window.confirm(`Hapus tahun ajaran ${year.name}?`)
+                            )
+                              deleteYear.mutate(year.id);
+                          }}
+                        >
+                          Hapus
+                        </ActionButton>
+                      </ActionGroup>
+                    ),
+                  },
+                ]}
+              />
+            </Panel>
+          ) : null}
+
+          {tab === "documents" ? (
+            <Panel
+              title="Dokumen PPDB"
+              description="Daftar ini muncul sebagai syarat pendaftaran online."
+            >
+              <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    saveDocuments.mutate();
+                  }}
+                  className="grid gap-3"
+                >
+                  <TextArea
+                    label="Dokumen wajib PPDB"
+                    value={documents}
+                    rows={9}
+                    onChange={setDocuments}
+                  />
+                  <p className="text-xs font-semibold text-[#64748b]">
+                    Satu baris untuk satu dokumen.
+                  </p>
+                  <SubmitButton pending={saveDocuments.isPending}>
+                    Simpan dokumen
+                  </SubmitButton>
+                </form>
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="mb-3 text-xs font-bold uppercase text-[#64748b]">
+                    Preview syarat
+                  </p>
+                  <div className="grid gap-1.5">
+                    {requiredDocuments.map((document) => (
+                      <div
+                        key={document}
+                        className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-medium text-[#334155]"
+                      >
+                        <Check className="h-4 w-4 text-emerald-600" />
+                        {document}
+                      </div>
+                    ))}
+                    {requiredDocuments.length === 0 ? (
+                      <EmptyState text="Belum ada dokumen wajib." />
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            </Panel>
+          ) : null}
+
+          {tab === "signature" ? (
+            <Panel
+              title="Tanda tangan raport"
+              description="Dipakai untuk PDF raport yang dipublish sekolah."
+            >
+              <section className="grid gap-4 xl:grid-cols-[0.86fr_1.14fr]">
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    saveSignature.mutate();
+                  }}
+                  className="grid gap-3"
+                >
+                  <TextInput
+                    label="Nama kepala sekolah"
+                    value={signature.principalName}
+                    required
+                    onChange={(value) =>
+                      setSignature({ ...signature, principalName: value })
+                    }
+                  />
+                  <TextInput
+                    label="Jabatan"
+                    value={signature.principalTitle}
+                    required
+                    onChange={(value) =>
+                      setSignature({ ...signature, principalTitle: value })
+                    }
+                  />
+                  <FileField
+                    label="Gambar tanda tangan"
+                    files={file ? [file] : []}
+                    accept="image/png,image/jpeg"
+                    onChange={(files) => setFile(files[0] ?? null)}
+                  />
+                  <TextInput
+                    label="URL gambar tanda tangan"
+                    value={signature.signatureUrl}
+                    onChange={(value) =>
+                      setSignature({ ...signature, signatureUrl: value })
+                    }
+                  />
+                  <SubmitButton pending={saveSignature.isPending}>
+                    Simpan tanda tangan
+                  </SubmitButton>
+                </form>
+                <div className="grid content-start gap-3">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-bold uppercase text-[#64748b]">
+                      Tampil di PDF
+                    </p>
+                    <p className="mt-3 text-base font-bold text-[#0a1f5c]">
+                      {signature.principalName}
+                    </p>
+                    <p className="text-sm font-medium text-[#64748b]">
+                      {signature.principalTitle}
+                    </p>
+                    <div className="mt-4 h-16 rounded-xl border border-dashed border-slate-200 bg-slate-50" />
+                  </div>
+                  <p className="rounded-xl bg-amber-50 p-3 text-xs font-medium leading-5 text-amber-800">
+                    Tanda tangan ini visual untuk PDF raport, bukan TTE
+                    tersertifikasi PSrE.
+                  </p>
+                </div>
+              </section>
+            </Panel>
+          ) : null}
+
+          {tab === "site" ? (
+            <Panel
+              title="Info website"
+              description="Kontrol konten singkat yang dipakai website publik dan alur PPDB."
+            >
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveSiteSettings.mutate();
+                }}
+                className="grid gap-3 xl:grid-cols-2"
+              >
+                <TextInput
+                  label="Judul PPDB / website"
+                  value={siteSettings.headline}
+                  onChange={(value) =>
+                    setSiteSettings({ ...siteSettings, headline: value })
+                  }
+                />
+                <TextInput
+                  label="Nomor WhatsApp admin"
+                  value={siteSettings.whatsapp}
+                  placeholder="62812..."
+                  onChange={(value) =>
+                    setSiteSettings({ ...siteSettings, whatsapp: value })
+                  }
+                />
+                <div className="xl:col-span-2">
+                  <TextArea
+                    label="Alamat sekolah"
+                    value={siteSettings.address}
+                    rows={3}
+                    onChange={(value) =>
+                      setSiteSettings({ ...siteSettings, address: value })
+                    }
+                  />
+                </div>
+                <div className="xl:col-span-2">
+                  <TextArea
+                    label="Pengumuman website"
+                    value={siteSettings.announcement}
+                    rows={4}
+                    placeholder="Contoh: PPDB gelombang 1 dibuka sampai 30 Juni."
+                    onChange={(value) =>
+                      setSiteSettings({ ...siteSettings, announcement: value })
+                    }
+                  />
+                </div>
+                <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-[#0a1f5c]">
+                  <input
+                    type="checkbox"
+                    checked={siteSettings.ppdbOpen}
+                    onChange={(event) =>
+                      setSiteSettings({
+                        ...siteSettings,
+                        ppdbOpen: event.target.checked,
+                      })
+                    }
+                  />
+                  Form PPDB online aktif
+                </label>
+                <div className="xl:col-span-2">
+                  <SubmitButton pending={saveSiteSettings.isPending}>
+                    Simpan pengaturan website
+                  </SubmitButton>
+                </div>
+              </form>
+            </Panel>
+          ) : null}
         </div>
       </div>
     </div>
